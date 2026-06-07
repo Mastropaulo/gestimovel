@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GestImóvel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-thumb { background:#ccc; border-radius:3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const { useState, useEffect, useCallback } = React;
+</script>
+<script>
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+// GestImóvel Web — App.jsx v2
+// Compatível com IDs prefixados: "bonito_1", "mastropaulo_1" etc.
+
+
+// =============================================================================
+// CONFIGURAÇÃO
+// =============================================================================
+const SUPABASE_URL = "https://mvthqvdzwhgzhpbwwlac.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_d2bU8uIA_YjlRp7qk5qcqQ_IDKHDK46";
+const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// =============================================================================
+// UTILITÁRIOS
+// =============================================================================
+const fmtBRL = v => v == null ? "—" : new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL"
+}).format(v);
+const fmtData = d => {
+  if (!d) return "—";
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
+};
+const diasPara = d => {
+  if (!d) return null;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const alvo = new Date(d + "T00:00:00");
+  return Math.round((alvo - hoje) / 86400000);
+};
+const mesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const hoje = new Date();
+const mesAtualStr = () => `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+
+// =============================================================================
+// PALETA
+// =============================================================================
+const C = {
+  bg: "#F5F0E8",
+  card: "#FFFFFF",
+  borda: "#E0D9CC",
+  sidebar: "#141414",
+  accent: "#F5A623",
+  texto: "#1A1A1A",
+  texto2: "#6B6560",
+  texto3: "#ADA89F",
+  verde: "#27AE60",
+  verde_bg: "#E6F7EE",
+  amarelo: "#F5A623",
+  amar_bg: "#FEF3DC",
+  azul: "#2C6EE8",
+  azul_bg: "#E8EFFC",
+  verm: "#E53E3E",
+  verm_bg: "#FEE8E8",
+  roxo: "#7C3AED"
+};
+const css = {
+  app: {
+    display: "flex",
+    height: "100vh",
+    fontFamily: "'Inter',system-ui,sans-serif",
+    background: C.bg,
+    color: C.texto,
+    overflow: "hidden"
+  },
+  sidebar: {
+    width: 200,
+    background: C.sidebar,
+    display: "flex",
+    flexDirection: "column",
+    padding: "16px 0",
+    flexShrink: 0
+  },
+  logo: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: 700,
+    padding: "0 16px 20px",
+    borderBottom: "1px solid #2a2a2a"
+  },
+  logoSub: {
+    color: C.accent,
+    fontSize: 10,
+    fontWeight: 400,
+    display: "block",
+    marginTop: 2
+  },
+  navItem: ativo => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "9px 16px",
+    color: ativo ? "#fff" : "#8A8A8A",
+    cursor: "pointer",
+    fontSize: 13,
+    background: ativo ? "#242424" : "transparent",
+    borderLeft: ativo ? `3px solid ${C.accent}` : "3px solid transparent",
+    transition: "all .15s"
+  }),
+  main: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden"
+  },
+  topbar: {
+    background: "#fff",
+    borderBottom: `1px solid ${C.borda}`,
+    padding: "10px 20px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  content: {
+    flex: 1,
+    overflow: "auto",
+    padding: 20
+  },
+  card: {
+    background: C.card,
+    borderRadius: 8,
+    border: `1px solid ${C.borda}`,
+    padding: 16
+  },
+  kpi: {
+    background: C.card,
+    borderRadius: 8,
+    border: `1px solid ${C.borda}`,
+    padding: "12px 16px",
+    minWidth: 130
+  },
+  badge: (cor, bg) => ({
+    background: bg,
+    color: cor,
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 11,
+    fontWeight: 600
+  }),
+  btn: (cor = C.azul, bg = C.azul_bg) => ({
+    background: bg,
+    color: cor,
+    border: "none",
+    borderRadius: 6,
+    padding: "6px 14px",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer"
+  }),
+  btnPrimary: {
+    background: C.accent,
+    color: "#1A1A1A",
+    border: "none",
+    borderRadius: 6,
+    padding: "8px 18px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 13
+  },
+  th: {
+    textAlign: "left",
+    padding: "8px 12px",
+    color: C.texto2,
+    fontSize: 11,
+    fontWeight: 600,
+    borderBottom: `1px solid ${C.borda}`,
+    textTransform: "uppercase",
+    letterSpacing: .5
+  },
+  td: {
+    padding: "10px 12px",
+    borderBottom: `1px solid ${C.borda}`,
+    color: C.texto
+  },
+  input: {
+    background: "#fff",
+    border: `1px solid ${C.borda}`,
+    borderRadius: 6,
+    padding: "7px 12px",
+    fontSize: 13,
+    color: C.texto,
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box"
+  },
+  mesNav: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6
+  },
+  mesBtn: {
+    background: C.card,
+    border: `1px solid ${C.borda}`,
+    borderRadius: 4,
+    padding: "3px 8px",
+    cursor: "pointer",
+    fontSize: 12,
+    color: C.texto
+  },
+  mesLabel: ativo => ({
+    padding: "3px 12px",
+    borderRadius: 4,
+    fontSize: 12,
+    fontWeight: 600,
+    background: ativo ? C.accent : C.card,
+    color: ativo ? "#1A1A1A" : C.texto,
+    border: `1px solid ${ativo ? C.accent : C.borda}`
+  })
+};
+
+// =============================================================================
+// LOGIN
+// =============================================================================
+function Login({
+  onLogin
+}) {
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [loading, setLoading] = useState(false);
+  const entrar = async () => {
+    setLoading(true);
+    setErro("");
+    const {
+      error
+    } = await sbClient.auth.signInWithPassword({
+      email,
+      password: senha
+    });
+    if (error) {
+      setErro("E-mail ou senha incorretos.");
+      setLoading(false);
+    } else onLogin();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100vh",
+      background: C.bg
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...css.card,
+      width: 340,
+      padding: 32
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "GestIm\xF3vel"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.texto2,
+      marginBottom: 24
+    }
+  }, "Gest\xE3o Imobili\xE1ria \xB7 Acesso seguro"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: C.texto2
+    }
+  }, "E-mail"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...css.input,
+      marginTop: 4,
+      marginBottom: 12
+    },
+    type: "email",
+    value: email,
+    onChange: e => setEmail(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: C.texto2
+    }
+  }, "Senha"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...css.input,
+      marginTop: 4,
+      marginBottom: 20
+    },
+    type: "password",
+    value: senha,
+    onChange: e => setSenha(e.target.value),
+    onKeyDown: e => e.key === "Enter" && entrar()
+  }), erro && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.verm,
+      fontSize: 12,
+      marginBottom: 12
+    }
+  }, erro), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...css.btnPrimary,
+      width: "100%"
+    },
+    onClick: entrar,
+    disabled: loading
+  }, loading ? "Entrando..." : "Entrar")));
+}
+
+// =============================================================================
+// COMPONENTES COMUNS
+// =============================================================================
+function KpiCard({
+  label,
+  value,
+  cor = C.azul,
+  sub
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: css.kpi
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 3,
+      borderRadius: 2,
+      background: cor,
+      marginBottom: 10
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.texto2,
+      fontWeight: 600,
+      textTransform: "uppercase",
+      letterSpacing: .5,
+      marginBottom: 4
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      color: C.texto
+    }
+  }, value), sub && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.texto2,
+      marginTop: 2
+    }
+  }, sub));
+}
+function MesNav({
+  ano,
+  mes,
+  onMudanca
+}) {
+  const label = `${mesNomes[mes - 1]} ${ano}`;
+  const ehAtual = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1;
+  const anterior = () => mes === 1 ? onMudanca(ano - 1, 12) : onMudanca(ano, mes - 1);
+  const proximo = () => mes === 12 ? onMudanca(ano + 1, 1) : onMudanca(ano, mes + 1);
+  return /*#__PURE__*/React.createElement("div", {
+    style: css.mesNav
+  }, /*#__PURE__*/React.createElement("button", {
+    style: css.mesBtn,
+    onClick: anterior
+  }, "\u25C0"), /*#__PURE__*/React.createElement("div", {
+    style: css.mesLabel(ehAtual)
+  }, label), /*#__PURE__*/React.createElement("button", {
+    style: css.mesBtn,
+    onClick: proximo
+  }, "\u25B6"), !ehAtual && /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...css.mesBtn,
+      color: C.texto2
+    },
+    onClick: () => onMudanca(hoje.getFullYear(), hoje.getMonth() + 1)
+  }, "Hoje"));
+}
+
+// =============================================================================
+// DASHBOARD
+// =============================================================================
+function PageDashboard({
+  clienteId
+}) {
+  const [data, setData] = useState(null);
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
+  const load = useCallback(async () => {
+    const mesHoje = mesAtualStr();
+    const [imoveis, contratos, pagamentos, seguros, adm] = await Promise.all([sbClient.from("imoveis").select("id,nome,status,valor_aluguel").eq("cliente_id", clienteId).neq("status", "moradia"), sbClient.from("contratos").select("id,imovel_id,locatario,valor,fim,prox_reajuste,indice,status").eq("cliente_id", clienteId).eq("status", "ativo"), sbClient.from("pagamentos").select("id,tipo,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId), sbClient.from("seguros").select("id,imovel_id,fim").eq("cliente_id", clienteId), sbClient.from("adm_saidas").select("id,valor,pago_em,status,mes").eq("cliente_id", clienteId).like("mes", mesStr + "%")]);
+    const pags = pagamentos.data || [];
+    const ims = imoveis.data || [];
+    const cts = contratos.data || [];
+
+    // Filtra recebimentos do mês (pago_em no mês selecionado)
+    const recAluguel = pags.filter(p => p.tipo === "aluguel" && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
+    const recOutros = pags.filter(p => p.tipo !== "aluguel" && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
+    const despIm = pags.filter(p => ["iptu", "agua", "luz", "condominio", "manutencao"].includes(p.tipo) && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
+    const admPago = (adm.data || []).reduce((s, p) => s + (p.valor || 0), 0);
+    const comissao = recAluguel * 0.10;
+
+    // Monta mapa de imóveis por id prefixado
+    const imMap = {};
+    ims.forEach(i => {
+      imMap[i.id] = i;
+    });
+    const alertas = [];
+    for (const ct of cts) {
+      const d = diasPara(ct.fim);
+      if (d != null && d <= 90) {
+        const im = imMap[ct.imovel_id];
+        alertas.push({
+          cor: d <= 15 ? C.verm : C.amarelo,
+          txt: `Contrato vence em ${d}d — ${im?.nome || ""}`,
+          dt: fmtData(ct.fim)
+        });
+      }
+    }
+    const pagsAlerta = pags.filter(p => p.status === "pendente" && p.vencimento?.startsWith(mesHoje.substring(0, 7)));
+    for (const p of pagsAlerta.slice(0, 15)) {
+      const d = diasPara(p.vencimento);
+      if (d != null) {
+        const im = imMap[p.imovel_id];
+        alertas.push({
+          cor: d < 0 ? C.verm : d <= 5 ? C.amarelo : C.azul,
+          txt: `${d < 0 ? "VENCIDO" : d + "d"} — ${p.tipo?.toUpperCase()} ${im?.nome || ""}`,
+          dt: fmtData(p.vencimento)
+        });
+      }
+    }
+    for (const sg of seguros.data || []) {
+      const d = diasPara(sg.fim);
+      if (d != null && d <= 60) {
+        const im = imMap[sg.imovel_id];
+        alertas.push({
+          cor: d <= 15 ? C.verm : C.amarelo,
+          txt: `Seguro vence em ${d}d — ${im?.nome || ""}`,
+          dt: fmtData(sg.fim)
+        });
+      }
+    }
+    setData({
+      total: ims.length,
+      alugados: ims.filter(i => i.status === "alugado").length,
+      disp: ims.filter(i => i.status === "disponivel").length,
+      recBruta: recAluguel + recOutros,
+      despIm,
+      comissao,
+      admPago,
+      recLiq: recAluguel + recOutros - comissao - admPago,
+      alertas: alertas.sort((a, b) => a.cor === C.verm ? -1 : 1).slice(0, 12),
+      imoveis: ims
+    });
+  }, [clienteId, mesStr]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (!data) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 40,
+      color: C.texto2
+    }
+  }, "Carregando...");
+  const nmCurto = mesNomes[mes - 1].substring(0, 3);
+  const kpis = [{
+    label: "Total imóveis",
+    value: data.total,
+    cor: C.azul
+  }, {
+    label: "Locados",
+    value: data.alugados,
+    cor: C.verde
+  }, {
+    label: "Disponíveis",
+    value: data.disp,
+    cor: C.amarelo
+  }, {
+    label: `Receita bruta — ${nmCurto}`,
+    value: fmtBRL(data.recBruta),
+    cor: C.azul
+  }, {
+    label: `Despesas — ${nmCurto}`,
+    value: fmtBRL(data.despIm),
+    cor: C.verm
+  }, {
+    label: `Comissão 10% — ${nmCurto}`,
+    value: fmtBRL(data.comissao),
+    cor: C.roxo
+  }, {
+    label: `Receita líq. — ${nmCurto}`,
+    value: fmtBRL(data.recLiq),
+    cor: C.verde
+  }];
+  const statusMap = {
+    alugado: {
+      txt: "Alugado",
+      cor: C.verde,
+      bg: C.verde_bg
+    },
+    disponivel: {
+      txt: "Disponível",
+      cor: C.amarelo,
+      bg: C.amar_bg
+    },
+    venda: {
+      txt: "Venda",
+      cor: C.azul,
+      bg: C.azul_bg
+    },
+    moradia: {
+      txt: "Moradia",
+      cor: C.texto2,
+      bg: "#eee"
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Vis\xE3o Geral"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+      marginBottom: 16
+    }
+  }, kpis.map((k, i) => /*#__PURE__*/React.createElement(KpiCard, _extends({
+    key: i
+  }, k)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "3fr 2fr",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "Alertas"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 1,
+      background: C.borda,
+      marginBottom: 8
+    }
+  }), data.alertas.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.verde,
+      fontSize: 13
+    }
+  }, "\u2713 Nenhum alerta pendente") : data.alertas.map((a, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 0",
+      borderBottom: `1px solid ${C.borda}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      background: a.cor,
+      flexShrink: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      fontSize: 13
+    }
+  }, a.txt), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.texto2
+    }
+  }, a.dt)))), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "Im\xF3veis"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 1,
+      background: C.borda,
+      marginBottom: 8
+    }
+  }), data.imoveis.map((im, i) => {
+    const s = statusMap[im.status] || {
+      txt: im.status,
+      cor: C.texto2,
+      bg: "#eee"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 0",
+        borderBottom: `1px solid ${C.borda}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13
+      }
+    }, im.nome), /*#__PURE__*/React.createElement("span", {
+      style: css.badge(s.cor, s.bg)
+    }, s.txt));
+  }))));
+}
+
+// =============================================================================
+// IMÓVEIS
+// =============================================================================
+function PageImoveis({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [busca, setBusca] = useState("");
+  useEffect(() => {
+    sbClient.from("imoveis").select("id,nome,tipo,status,endereco,bairro,cidade,valor_aluguel,proprietario,obs").eq("cliente_id", clienteId).order("nome").then(r => setRows(r.data || []));
+  }, [clienteId]);
+  const statusMap = {
+    alugado: {
+      txt: "Alugado",
+      cor: C.verde,
+      bg: C.verde_bg
+    },
+    disponivel: {
+      txt: "Disponível",
+      cor: C.amarelo,
+      bg: C.amar_bg
+    },
+    venda: {
+      txt: "Venda",
+      cor: C.azul,
+      bg: C.azul_bg
+    },
+    moradia: {
+      txt: "Moradia",
+      cor: C.texto2,
+      bg: "#eee"
+    }
+  };
+  const filtrado = rows.filter(r => !busca || r.nome?.toLowerCase().includes(busca.toLowerCase()) || r.bairro?.toLowerCase().includes(busca.toLowerCase()) || r.cidade?.toLowerCase().includes(busca.toLowerCase()));
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Im\xF3veis"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...css.input,
+      width: 220
+    },
+    placeholder: "Buscar im\xF3vel...",
+    value: busca,
+    onChange: e => setBusca(e.target.value)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["ID", "Imóvel", "Tipo", "Cidade", "Aluguel", "Proprietário", "Situação"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtrado.map(r => {
+    const s = statusMap[r.status] || {
+      txt: r.status || "—",
+      cor: C.texto2,
+      bg: "#eee"
+    };
+    // Exibe só a parte numérica do ID prefixado
+    const idLocal = r.id?.split("_").pop() || r.id;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: C.texto2,
+        fontSize: 11
+      }
+    }, idLocal), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("strong", null, r.nome)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.tipo || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.cidade || r.bairro || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(r.valor_aluguel)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.proprietario || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(s.cor, s.bg)
+    }, s.txt)));
+  }))), filtrado.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhum im\xF3vel encontrado.")));
+}
+
+// =============================================================================
+// CONTRATOS
+// =============================================================================
+function PageContratos({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [imoveisMap, setImoveisMap] = useState({});
+  const [busca, setBusca] = useState("");
+  useEffect(() => {
+    Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("contratos").select("id,locatario,valor,inicio,fim,prox_reajuste,indice,status,garantia,imovel_id").eq("cliente_id", clienteId).order("status").order("fim")]).then(([ims, cts]) => {
+      const m = {};
+      (ims.data || []).forEach(i => {
+        m[i.id] = i.nome;
+      });
+      setImoveisMap(m);
+      setRows(cts.data || []);
+    });
+  }, [clienteId]);
+  const filtrado = rows.filter(r => !busca || r.locatario?.toLowerCase().includes(busca.toLowerCase()) || imoveisMap[r.imovel_id]?.toLowerCase().includes(busca.toLowerCase()));
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Contratos"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...css.input,
+      width: 220
+    },
+    placeholder: "Buscar locat\xE1rio ou im\xF3vel...",
+    value: busca,
+    onChange: e => setBusca(e.target.value)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Locatário", "Valor", "Início", "Fim", "Próx. Reajuste", "Índice", "Situação"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtrado.map(r => {
+    const d = diasPara(r.fim);
+    const corFim = d == null ? "" : d <= 15 ? C.verm : d <= 90 ? C.amarelo : C.texto;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, imoveisMap[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("strong", null, r.locatario)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(r.valor)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.inicio)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: corFim,
+        fontWeight: corFim !== C.texto ? 600 : 400
+      }
+    }, fmtData(r.fim), d != null && d <= 90 ? ` (${d}d)` : ""), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.prox_reajuste)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.indice || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(r.status === "ativo" ? C.verde : C.texto2, r.status === "ativo" ? C.verde_bg : "#eee")
+    }, r.status)));
+  })))));
+}
+
+// =============================================================================
+// RECEBIMENTOS
+// =============================================================================
+function PageRecebimentos({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [imsMap, setImsMap] = useState({});
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  useEffect(() => {
+    setRows([]);
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId).then(function (ri) {
+      const m = {};
+      (ri.data || []).forEach(function (i) {
+        m[i.id] = i.nome;
+      });
+      setImsMap(m);
+    });
+    var map = {};
+    var done = 0;
+    function merge(data) {
+      (data || []).forEach(function (p) {
+        map[p.id] = p;
+      });
+      done++;
+      if (done === 2) {
+        setRows(Object.values(map));
+      }
+    }
+    sbClient.from("pagamentos").select("id,tipo,descricao,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId).like("pago_em", ms + "%").then(function (r) {
+      merge(r.data);
+    });
+    sbClient.from("pagamentos").select("id,tipo,descricao,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId).like("vencimento", ms + "%").then(function (r) {
+      merge(r.data);
+    });
+  }, [clienteId, ano, mes]);
+  const mesStr = ano + "-" + String(mes).padStart(2, "0");
+  const tipos = ["todos", ...new Set(rows.map(function (r) {
+    return r.tipo;
+  }).filter(Boolean))];
+  const filtrado = rows.filter(function (r) {
+    return (filtroStatus === "todos" || r.status === filtroStatus) && (filtroTipo === "todos" || r.tipo === filtroTipo);
+  });
+  const recebido = rows.filter(function (r) {
+    return r.status === "pago";
+  }).reduce(function (s, r) {
+    return s + (r.valor || 0);
+  }, 0);
+  const pendentes = rows.filter(function (r) {
+    return r.status === "pendente";
+  }).reduce(function (s, r) {
+    return s + (r.valor || 0);
+  }, 0);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Recebimentos"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Recebido",
+    value: fmtBRL(recebido),
+    cor: C.verde
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "A receber",
+    value: fmtBRL(pendentes),
+    cor: C.amarelo
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Total esperado",
+    value: fmtBRL(recebido + pendentes),
+    cor: C.azul
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap",
+      marginBottom: 12
+    }
+  }, ["todos", "pendente", "pago"].map(s => /*#__PURE__*/React.createElement("button", {
+    key: s,
+    onClick: () => setFiltroStatus(s),
+    style: {
+      ...css.btn(C.azul, filtroStatus === s ? C.azul_bg : "#f0ede6"),
+      fontWeight: filtroStatus === s ? 700 : 400
+    }
+  }, s === "todos" ? "Todos" : s === "pendente" ? "Pendentes" : "Recebidos")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 1,
+      background: C.borda,
+      margin: "0 4px"
+    }
+  }), tipos.map(t => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    onClick: () => setFiltroTipo(t),
+    style: {
+      ...css.btn(C.roxo, filtroTipo === t ? "#ede9fb" : "#f0ede6"),
+      fontWeight: filtroTipo === t ? 700 : 400
+    }
+  }, t === "todos" ? "Todos tipos" : t))), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Tipo", "Valor", "Vencimento", "Recebido em", "Status"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtrado.map(r => /*#__PURE__*/React.createElement("tr", {
+    key: r.id,
+    onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+    onMouseLeave: e => e.currentTarget.style.background = ""
+  }, /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, imsMap[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, r.tipo), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, /*#__PURE__*/React.createElement("strong", null, fmtBRL(r.valor))), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, fmtData(r.vencimento)), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, fmtData(r.pago_em)), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, /*#__PURE__*/React.createElement("span", {
+    style: css.badge(r.status === "pago" ? C.verde : C.amarelo, r.status === "pago" ? C.verde_bg : C.amar_bg)
+  }, r.status)))))), filtrado.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhum recebimento no per\xEDodo.")));
+}
+
+// =============================================================================
+// PAGAMENTOS (saídas)
+// =============================================================================
+function PagePagamentos({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
+  const [imoveisMapP, setImoveisMapP] = useState({});
+  useEffect(() => {
+    Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("pagamentos").select("id,tipo,descricao,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId).like("vencimento", mesStr + "%").order("vencimento")]).then(([ims, pags]) => {
+      const m = {};
+      (ims.data || []).forEach(i => {
+        m[i.id] = i.nome;
+      });
+      setImoveisMapP(m);
+      setRows(pags.data || []);
+    });
+  }, [clienteId, mesStr]);
+  const filtrado = filtroStatus === "todos" ? rows : rows.filter(r => r.status === filtroStatus);
+  const pendentes = rows.filter(r => r.status === "pendente").reduce((s, r) => s + (r.valor || 0), 0);
+  const pagos = rows.filter(r => r.status === "pago").reduce((s, r) => s + (r.valor || 0), 0);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Pagamentos (Sa\xEDdas)"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Pagos",
+    value: fmtBRL(pagos),
+    cor: C.verde
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Pendentes",
+    value: fmtBRL(pendentes),
+    cor: C.verm
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Total",
+    value: fmtBRL(pagos + pendentes),
+    cor: C.azul
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 12
+    }
+  }, ["todos", "pendente", "pago"].map(s => /*#__PURE__*/React.createElement("button", {
+    key: s,
+    onClick: () => setFiltroStatus(s),
+    style: {
+      ...css.btn(C.azul, filtroStatus === s ? C.azul_bg : "#f0ede6"),
+      fontWeight: filtroStatus === s ? 700 : 400
+    }
+  }, s === "todos" ? "Todos" : s === "pendente" ? "Pendentes" : "Pagos"))), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Tipo", "Descrição", "Valor", "Vencimento", "Pago em", "Status"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtrado.map(r => {
+    const d = diasPara(r.vencimento);
+    const vc = r.status === "pago" ? C.texto : d == null ? C.texto : d < 0 ? C.verm : d <= 5 ? C.amarelo : C.texto;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, imoveisMapP[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.tipo), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.descricao || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(r.valor)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: vc,
+        fontWeight: vc !== C.texto ? 600 : 400
+      }
+    }, fmtData(r.vencimento)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.pago_em)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(r.status === "pago" ? C.verde : C.verm, r.status === "pago" ? C.verde_bg : C.verm_bg)
+    }, r.status)));
+  })))));
+}
+
+// =============================================================================
+// BOLETOS
+// =============================================================================
+function PageBoletos({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [imoveisMapB, setImoveisMapB] = useState({});
+  const [contratosMapB, setContratosMapB] = useState({});
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  useEffect(() => {
+    Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("contratos").select("id,locatario").eq("cliente_id", clienteId), sbClient.from("boletos").select("id,valor,vencimento,pago_em,status,nosso_numero,linha_digitavel,referencia,emitido_em,imovel_id,contrato_id").eq("cliente_id", clienteId).order("vencimento", {
+      ascending: false
+    })]).then(([ims, cts, bols]) => {
+      const mi = {};
+      (ims.data || []).forEach(i => {
+        mi[i.id] = i.nome;
+      });
+      const mc = {};
+      (cts.data || []).forEach(c => {
+        mc[c.id] = c.locatario;
+      });
+      setImoveisMapB(mi);
+      setContratosMapB(mc);
+      setRows(bols.data || []);
+    });
+  }, [clienteId]);
+  const filtrado = filtroStatus === "todos" ? rows : rows.filter(r => r.status === filtroStatus);
+  const emitidos = rows.filter(r => r.status === "emitido").length;
+  const pagos = rows.filter(r => r.status === "pago").length;
+  const totalEmit = rows.filter(r => r.status === "emitido").reduce((s, r) => s + (r.valor || 0), 0);
+  const statusCores = {
+    emitido: {
+      cor: C.azul,
+      bg: C.azul_bg
+    },
+    pago: {
+      cor: C.verde,
+      bg: C.verde_bg
+    },
+    cancelado: {
+      cor: C.texto2,
+      bg: "#eee"
+    },
+    vencido: {
+      cor: C.verm,
+      bg: C.verm_bg
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      marginBottom: 12
+    }
+  }, "Boletos Banc\xE1rios"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Emitidos (em aberto)",
+    value: emitidos,
+    sub: fmtBRL(totalEmit),
+    cor: C.azul
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Pagos",
+    value: pagos,
+    cor: C.verde
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Total emitido",
+    value: rows.length,
+    cor: C.roxo
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 12
+    }
+  }, ["todos", "emitido", "pago", "vencido", "cancelado"].map(s => /*#__PURE__*/React.createElement("button", {
+    key: s,
+    onClick: () => setFiltroStatus(s),
+    style: {
+      ...css.btn(C.azul, filtroStatus === s ? C.azul_bg : "#f0ede6"),
+      fontWeight: filtroStatus === s ? 700 : 400
+    }
+  }, s === "todos" ? "Todos" : s.charAt(0).toUpperCase() + s.slice(1)))), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Locatário", "Referência", "Valor", "Vencimento", "Pago em", "Situação", "Linha Digitável"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtrado.map(r => {
+    const sc = statusCores[r.status] || {
+      cor: C.texto2,
+      bg: "#eee"
+    };
+    const d = diasPara(r.vencimento);
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, imoveisMapB[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, contratosMapB[r.contrato_id] || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.referencia || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("strong", null, fmtBRL(r.valor))), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: r.status === "emitido" && d != null && d < 0 ? C.verm : C.texto,
+        fontWeight: r.status === "emitido" && d != null && d < 0 ? 700 : 400
+      }
+    }, fmtData(r.vencimento), r.status === "emitido" && d != null && d < 0 ? " ⚠️" : ""), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.pago_em)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(sc.cor, sc.bg)
+    }, r.status)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        fontSize: 11,
+        color: C.texto2,
+        maxWidth: 160,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }
+    }, r.linha_digitavel || "—"));
+  }))), filtrado.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhum boleto encontrado.")));
+}
+
+// =============================================================================
+// SEGUROS
+// =============================================================================
+function PageSeguros({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [imoveisMapS, setImoveisMapS] = useState({});
+  useEffect(() => {
+    Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("seguros").select("id,seguradora,tipo,numero_apolice,valor_premio,inicio,fim,imovel_id").eq("cliente_id", clienteId).order("fim")]).then(([ims, segs]) => {
+      const m = {};
+      (ims.data || []).forEach(i => {
+        m[i.id] = i.nome;
+      });
+      setImoveisMapS(m);
+      setRows(segs.data || []);
+    });
+  }, [clienteId]);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      marginBottom: 16
+    }
+  }, "Seguros"), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Seguradora", "Tipo", "Apólice", "Prêmio", "Início", "Vencimento", "Status"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+    const d = diasPara(r.fim);
+    const cor = d == null ? C.texto : d < 0 ? C.verm : d <= 15 ? C.verm : d <= 60 ? C.amarelo : C.verde;
+    const bg = d == null ? "" : d < 0 ? C.verm_bg : d <= 15 ? C.verm_bg : d <= 60 ? C.amar_bg : C.verde_bg;
+    const txt = d == null ? "—" : d < 0 ? "Vencido" : d <= 60 ? `${d}d` : "Vigente";
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, imoveisMapS[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.seguradora || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.tipo || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.numero_apolice || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(r.valor_premio)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.inicio)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.fim)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(cor, bg || "#f5f5f5")
+    }, txt)));
+  })))));
+}
+
+// =============================================================================
+// ADMINISTRADORA
+// =============================================================================
+function PageAdministradora({
+  clienteId
+}) {
+  const [rows, setRows] = useState([]);
+  const [config, setConfig] = useState([]);
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
+  const [receitaMes, setReceitaMes] = useState(0);
+  useEffect(() => {
+    // Saídas do mês
+    sbClient.from("adm_saidas").select("id,descricao,valor,mes,pago_em,status,categoria,competencia,fixo").eq("cliente_id", clienteId).like("mes", mesStr + "%").order("mes").then(r => setRows(r.data || []));
+
+    // Config de itens mensais
+    sbClient.from("adm_saidas_config").select("id,descricao,valor_padrao,categoria").eq("cliente_id", clienteId).then(r => setConfig(r.data || []));
+
+    // Receita de aluguéis pagos no mês
+    sbClient.from("pagamentos").select("valor,tipo,status,pago_em").eq("cliente_id", clienteId).eq("tipo", "aluguel").eq("status", "pago").like("pago_em", mesStr + "%").then(r => {
+      const total = (r.data || []).reduce((s, p) => s + (p.valor || 0), 0);
+      setReceitaMes(total);
+    });
+  }, [clienteId, mesStr]);
+  const comissao = receitaMes * 0.10;
+  const totalSaidas = rows.reduce((s, r) => s + (r.valor || 0), 0);
+  const totalPago = rows.filter(r => r.status === "pago").reduce((s, r) => s + (r.valor || 0), 0);
+  const totalPend = rows.filter(r => r.status !== "pago").reduce((s, r) => s + (r.valor || 0), 0);
+  const saldo = comissao - totalSaidas;
+  const statusCores = {
+    pago: {
+      cor: C.verde,
+      bg: C.verde_bg
+    },
+    pendente: {
+      cor: C.amarelo,
+      bg: C.amar_bg
+    },
+    agendado: {
+      cor: C.azul,
+      bg: C.azul_bg
+    }
+  };
+  const catCores = {
+    contabilidade: {
+      cor: "#6366f1",
+      bg: "#ede9fe"
+    },
+    bancaria: {
+      cor: "#0891b2",
+      bg: "#e0f2fe"
+    },
+    imposto: {
+      cor: C.verm,
+      bg: C.verm_bg
+    },
+    "pró-labore": {
+      cor: C.roxo,
+      bg: "#f3e8ff"
+    },
+    outros: {
+      cor: C.texto2,
+      bg: "#f0ede6"
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Administradora"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Receita alugu\xE9is",
+    value: fmtBRL(receitaMes),
+    cor: C.azul
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Comiss\xE3o 10%",
+    value: fmtBRL(comissao),
+    cor: C.roxo
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Sa\xEDdas previstas",
+    value: fmtBRL(totalSaidas),
+    cor: C.verm
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Sa\xEDdas pagas",
+    value: fmtBRL(totalPago),
+    cor: C.verde
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Sa\xEDdas pendentes",
+    value: fmtBRL(totalPend),
+    cor: C.amarelo
+  }), /*#__PURE__*/React.createElement(KpiCard, {
+    label: "Saldo estimado",
+    value: fmtBRL(saldo),
+    cor: saldo >= 0 ? C.verde : C.verm,
+    sub: saldo >= 0 ? "✓ Positivo" : "⚠ Negativo"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 12
+    }
+  }, "Sa\xEDdas \u2014 ", mesNomes[mes - 1], " ", ano, rows.length === 0 && config.length > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: C.texto2,
+      fontWeight: 400,
+      marginLeft: 8
+    }
+  }, "(nenhum lan\xE7amento neste m\xEAs \u2014 ", config.length, " item(ns) configurado(s))")), rows.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhuma sa\xEDda lan\xE7ada neste m\xEAs.") : /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Descrição", "Categoria", "Competência", "Valor", "Pago em", "Status", "Fixo"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+    const sc = statusCores[r.status] || {
+      cor: C.texto2,
+      bg: "#eee"
+    };
+    const cc = catCores[r.categoria?.toLowerCase()] || catCores.outros;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+      onMouseLeave: e => e.currentTarget.style.background = ""
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("strong", null, r.descricao || "—")), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(cc.cor, cc.bg)
+    }, r.categoria || "—")), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.competencia || r.mes || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(r.valor)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.pago_em)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("span", {
+      style: css.badge(sc.cor, sc.bg)
+    }, r.status || "—")), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, r.fixo ? "●" : "—"));
+  })))), config.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...css.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10,
+      fontSize: 13
+    }
+  }, "Itens mensais configurados (", config.length, ")"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, config.map(c => /*#__PURE__*/React.createElement("div", {
+    key: c.id,
+    style: {
+      background: "#f9f7f3",
+      border: `1px solid ${C.borda}`,
+      borderRadius: 6,
+      padding: "6px 12px",
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600
+    }
+  }, c.descricao), c.valor_padrao && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.texto2,
+      marginLeft: 6
+    }
+  }, fmtBRL(c.valor_padrao)), c.categoria && /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...css.badge(C.texto2, "#eee"),
+      marginLeft: 6
+    }
+  }, c.categoria))))));
+}
+
+// =============================================================================
+// NAVEGAÇÃO
+// =============================================================================
+const PAGINAS = [{
+  id: "dashboard",
+  label: "Dashboard",
+  icon: "⬜"
+}, {
+  id: "imoveis",
+  label: "Imóveis",
+  icon: "🏢"
+}, {
+  id: "contratos",
+  label: "Contratos",
+  icon: "📋"
+}, {
+  id: "recebimentos",
+  label: "Recebimentos",
+  icon: "💰"
+}, {
+  id: "pagamentos",
+  label: "Pagamentos",
+  icon: "📤"
+}, {
+  id: "boletos",
+  label: "Boletos",
+  icon: "🏦"
+}, {
+  id: "seguros",
+  label: "Seguros",
+  icon: "🛡️"
+}, {
+  id: "administradora",
+  label: "Administradora",
+  icon: "🏛️"
+}];
+
+// =============================================================================
+// APP PRINCIPAL
+// =============================================================================
+function App() {
+  const [sessao, setSessao] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pagina, setPagina] = useState("dashboard");
+  const [clientes, setClientes] = useState([]);
+  const [clienteId, setClienteId] = useState(null);
+  useEffect(() => {
+    sbClient.auth.getSession().then(({
+      data
+    }) => {
+      setSessao(data.session);
+      setLoading(false);
+    });
+    sbClient.auth.onAuthStateChange((_e, s) => setSessao(s));
+  }, []);
+  useEffect(() => {
+    if (!sessao) return;
+    sbClient.from("clientes").select("id,nome").order("nome").then(r => {
+      const cs = r.data || [];
+      setClientes(cs);
+      if (cs.length > 0 && !clienteId) setClienteId(cs[0].id);
+    });
+  }, [sessao]);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 40,
+      color: C.texto2
+    }
+  }, "Carregando...");
+  if (!sessao) return /*#__PURE__*/React.createElement(Login, {
+    onLogin: () => {}
+  });
+  const sair = async () => {
+    await sbClient.auth.signOut();
+    setSessao(null);
+  };
+  const clienteAtivo = clientes.find(c => c.id === clienteId);
+  const renderPagina = () => {
+    if (!clienteId) return /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 40,
+        color: C.texto2
+      }
+    }, "Selecione um cliente.");
+    const props = {
+      clienteId
+    };
+    switch (pagina) {
+      case "dashboard":
+        return /*#__PURE__*/React.createElement(PageDashboard, props);
+      case "imoveis":
+        return /*#__PURE__*/React.createElement(PageImoveis, props);
+      case "contratos":
+        return /*#__PURE__*/React.createElement(PageContratos, props);
+      case "recebimentos":
+        return /*#__PURE__*/React.createElement(PageRecebimentos, props);
+      case "pagamentos":
+        return /*#__PURE__*/React.createElement(PagePagamentos, props);
+      case "boletos":
+        return /*#__PURE__*/React.createElement(PageBoletos, props);
+      case "seguros":
+        return /*#__PURE__*/React.createElement(PageSeguros, props);
+      case "administradora":
+        return /*#__PURE__*/React.createElement(PageAdministradora, props);
+      default:
+        return /*#__PURE__*/React.createElement(PageDashboard, props);
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: css.app
+  }, /*#__PURE__*/React.createElement("div", {
+    style: css.sidebar
+  }, /*#__PURE__*/React.createElement("div", {
+    style: css.logo
+  }, "GestIm\xF3vel", /*#__PURE__*/React.createElement("span", {
+    style: css.logoSub
+  }, "Gest\xE3o Imobili\xE1ria")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "12px 16px 8px",
+      borderBottom: "1px solid #2a2a2a"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#555",
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: .5
+    }
+  }, "Cliente"), /*#__PURE__*/React.createElement("select", {
+    value: clienteId || "",
+    onChange: e => setClienteId(e.target.value),
+    style: {
+      background: "#1e1e1e",
+      color: "#ccc",
+      border: "1px solid #333",
+      borderRadius: 4,
+      padding: "5px 8px",
+      width: "100%",
+      fontSize: 12
+    }
+  }, clientes.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c.id,
+    value: c.id
+  }, c.nome.split(" ")[0])))), /*#__PURE__*/React.createElement("nav", {
+    style: {
+      flex: 1,
+      paddingTop: 8
+    }
+  }, PAGINAS.map(p => /*#__PURE__*/React.createElement("div", {
+    key: p.id,
+    style: css.navItem(pagina === p.id),
+    onClick: () => setPagina(p.id)
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14
+    }
+  }, p.icon), /*#__PURE__*/React.createElement("span", null, p.label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "12px 16px",
+      borderTop: "1px solid #2a2a2a"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555",
+      marginBottom: 6
+    }
+  }, sessao.user?.email), /*#__PURE__*/React.createElement("button", {
+    onClick: sair,
+    style: {
+      background: "transparent",
+      color: "#666",
+      border: "1px solid #333",
+      borderRadius: 4,
+      padding: "5px 12px",
+      cursor: "pointer",
+      fontSize: 11,
+      width: "100%"
+    }
+  }, "Sair"))), /*#__PURE__*/React.createElement("div", {
+    style: css.main
+  }, /*#__PURE__*/React.createElement("div", {
+    style: css.topbar
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600,
+      color: C.texto
+    }
+  }, PAGINAS.find(p => p.id === pagina)?.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.texto2
+    }
+  }, clienteAtivo?.nome, " \xB7 ", new Date().toLocaleDateString("pt-BR"))), /*#__PURE__*/React.createElement("div", {
+    style: css.content
+  }, renderPagina())));
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
+</script></body></html>
