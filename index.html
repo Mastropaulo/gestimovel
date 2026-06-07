@@ -57,6 +57,20 @@ const mesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "J
 const hoje = new Date();
 const mesAtualStr = () => `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 
+// Equivalente ao _mes_limite_vencido do gestimovel.py
+// Retorna o último mês cujo vencimento já passou
+function mesLimiteVencido(diaVencimento) {
+  var dia = Math.min(diaVencimento || 10, 28);
+  if (hoje.getDate() >= dia) {
+    // vencimento deste mês já passou
+    return hoje.getFullYear() + "-" + String(hoje.getMonth() + 1).padStart(2, "0");
+  } else {
+    // ainda não venceu — retorna mês anterior
+    if (hoje.getMonth() === 0) return hoje.getFullYear() - 1 + "-12";
+    return hoje.getFullYear() + "-" + String(hoje.getMonth()).padStart(2, "0");
+  }
+}
+
 // =============================================================================
 // PALETA
 // =============================================================================
@@ -412,77 +426,111 @@ function PageDashboard({
   const [data, setData] = useState(null);
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth() + 1);
-  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
-  const load = useCallback(async () => {
-    const mesHoje = mesAtualStr();
-    const [imoveis, contratos, pagamentos, seguros, adm] = await Promise.all([sbClient.from("imoveis").select("id,nome,status,valor_aluguel").eq("cliente_id", clienteId).neq("status", "moradia"), sbClient.from("contratos").select("id,imovel_id,locatario,valor,fim,prox_reajuste,indice,status").eq("cliente_id", clienteId).eq("status", "ativo"), sbClient.from("pagamentos").select("id,tipo,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId), sbClient.from("seguros").select("id,imovel_id,fim").eq("cliente_id", clienteId), sbClient.from("adm_saidas").select("id,valor,pago_em,status,mes").eq("cliente_id", clienteId).like("mes", mesStr + "%")]);
-    const pags = pagamentos.data || [];
-    const ims = imoveis.data || [];
-    const cts = contratos.data || [];
-
-    // Filtra recebimentos do mês (pago_em no mês selecionado)
-    const recAluguel = pags.filter(p => p.tipo === "aluguel" && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
-    const recOutros = pags.filter(p => p.tipo !== "aluguel" && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
-    const despIm = pags.filter(p => ["iptu", "agua", "luz", "condominio", "manutencao"].includes(p.tipo) && p.status === "pago" && p.pago_em?.startsWith(mesStr)).reduce((s, p) => s + (p.valor || 0), 0);
-    const admPago = (adm.data || []).reduce((s, p) => s + (p.valor || 0), 0);
-    const comissao = recAluguel * 0.10;
-
-    // Monta mapa de imóveis por id prefixado
-    const imMap = {};
-    ims.forEach(i => {
-      imMap[i.id] = i;
-    });
-    const alertas = [];
-    for (const ct of cts) {
-      const d = diasPara(ct.fim);
-      if (d != null && d <= 90) {
-        const im = imMap[ct.imovel_id];
-        alertas.push({
-          cor: d <= 15 ? C.verm : C.amarelo,
-          txt: `Contrato vence em ${d}d — ${im?.nome || ""}`,
-          dt: fmtData(ct.fim)
-        });
-      }
-    }
-    const pagsAlerta = pags.filter(p => p.status === "pendente" && p.vencimento?.startsWith(mesHoje.substring(0, 7)));
-    for (const p of pagsAlerta.slice(0, 15)) {
-      const d = diasPara(p.vencimento);
-      if (d != null) {
-        const im = imMap[p.imovel_id];
-        alertas.push({
-          cor: d < 0 ? C.verm : d <= 5 ? C.amarelo : C.azul,
-          txt: `${d < 0 ? "VENCIDO" : d + "d"} — ${p.tipo?.toUpperCase()} ${im?.nome || ""}`,
-          dt: fmtData(p.vencimento)
-        });
-      }
-    }
-    for (const sg of seguros.data || []) {
-      const d = diasPara(sg.fim);
-      if (d != null && d <= 60) {
-        const im = imMap[sg.imovel_id];
-        alertas.push({
-          cor: d <= 15 ? C.verm : C.amarelo,
-          txt: `Seguro vence em ${d}d — ${im?.nome || ""}`,
-          dt: fmtData(sg.fim)
-        });
-      }
-    }
-    setData({
-      total: ims.length,
-      alugados: ims.filter(i => i.status === "alugado").length,
-      disp: ims.filter(i => i.status === "disponivel").length,
-      recBruta: recAluguel + recOutros,
-      despIm,
-      comissao,
-      admPago,
-      recLiq: recAluguel + recOutros - comissao - admPago,
-      alertas: alertas.sort((a, b) => a.cor === C.verm ? -1 : 1).slice(0, 12),
-      imoveis: ims
-    });
-  }, [clienteId, mesStr]);
   useEffect(() => {
-    load();
-  }, [load]);
+    setData(null);
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    Promise.all([sbClient.from("imoveis").select("id,nome,status,valor_aluguel,tipo").eq("cliente_id", clienteId), sbClient.from("contratos").select("id,imovel_id,locatario,valor,fim,prox_reajuste,indice,status").eq("cliente_id", clienteId).eq("status", "ativo"), sbClient.from("pagamentos").select("id,tipo,valor,vencimento,pago_em,status,imovel_id").eq("cliente_id", clienteId), sbClient.from("seguros").select("id,imovel_id,fim").eq("cliente_id", clienteId)]).then(function ([ri, rc, rp, rs]) {
+      const ims = ri.data || [];
+      const cts = rc.data || [];
+      const pags = rp.data || [];
+      const segs = rs.data || [];
+      const imMap = {};
+      ims.forEach(function (i) {
+        imMap[i.id] = i;
+      });
+
+      // Receitas do mês (pago_em no mês)
+      const recAluguel = pags.filter(function (p) {
+        return p.tipo === "aluguel" && p.status === "pago" && p.pago_em && p.pago_em.indexOf(ms) === 0;
+      }).reduce(function (s, p) {
+        return s + (p.valor || 0);
+      }, 0);
+      const despIm = pags.filter(function (p) {
+        return ["iptu", "agua", "luz", "condominio", "manutencao"].includes(p.tipo) && p.status === "pago" && p.pago_em && p.pago_em.indexOf(ms) === 0;
+      }).reduce(function (s, p) {
+        return s + (p.valor || 0);
+      }, 0);
+      const despLoc = pags.filter(function (p) {
+        return p.tipo === "locador" && p.status === "pago" && p.pago_em && p.pago_em.indexOf(ms) === 0;
+      }).reduce(function (s, p) {
+        return s + (p.valor || 0);
+      }, 0);
+      const comissao = recAluguel * 0.10;
+      const recLiq = recAluguel - comissao;
+
+      // Alertas
+      const alertas = [];
+      for (const ct of cts) {
+        const d = diasPara(ct.fim);
+        if (d != null && d <= 90) {
+          const im = imMap[ct.imovel_id];
+          alertas.push({
+            cor: d <= 15 ? C.verm : C.amarelo,
+            txt: "Contrato vence em " + d + "d — " + (im?.nome || ""),
+            dt: fmtData(ct.fim)
+          });
+        }
+        // Reajuste
+        if (ct.prox_reajuste) {
+          const dr = diasPara(ct.prox_reajuste);
+          if (dr != null && dr <= 60) {
+            const im = imMap[ct.imovel_id];
+            alertas.push({
+              cor: dr <= 0 ? C.verm : C.amarelo,
+              txt: "Reajuste " + (ct.indice || "") + " — " + (im?.nome || ""),
+              dt: fmtData(ct.prox_reajuste)
+            });
+          }
+        }
+      }
+      for (const sg of segs) {
+        const d = diasPara(sg.fim);
+        if (d != null && d <= 60) {
+          const im = imMap[sg.imovel_id];
+          alertas.push({
+            cor: d <= 15 ? C.verm : C.amarelo,
+            txt: "Seguro vence em " + d + "d — " + (im?.nome || ""),
+            dt: fmtData(sg.fim)
+          });
+        }
+      }
+      // Pagamentos vencidos no mês atual
+      const mesHoje = hoje.getFullYear() + "-" + String(hoje.getMonth() + 1).padStart(2, "0");
+      pags.filter(function (p) {
+        return p.status === "pendente" && p.vencimento && p.vencimento.indexOf(mesHoje) === 0;
+      }).slice(0, 10).forEach(function (p) {
+        const d = diasPara(p.vencimento);
+        if (d != null) {
+          const im = imMap[p.imovel_id];
+          alertas.push({
+            cor: d < 0 ? C.verm : d <= 5 ? C.amarelo : C.azul,
+            txt: (d < 0 ? "VENCIDO" : d + "d") + " — " + p.tipo?.toUpperCase() + " " + (im?.nome || ""),
+            dt: fmtData(p.vencimento)
+          });
+        }
+      });
+      setData({
+        total: ims.length,
+        alugados: ims.filter(function (i) {
+          return i.status === "alugado";
+        }).length,
+        disp: ims.filter(function (i) {
+          return i.status === "disponivel";
+        }).length,
+        recAluguel,
+        despIm,
+        despLoc,
+        comissao,
+        recLiq,
+        alertas: alertas.sort(function (a, b) {
+          return a.cor === C.verm ? -1 : 1;
+        }).slice(0, 15),
+        imoveis: ims.filter(function (i) {
+          return i.status !== "moradia";
+        })
+      });
+    });
+  }, [clienteId, ano, mes]);
   if (!data) return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 40,
@@ -503,19 +551,23 @@ function PageDashboard({
     value: data.disp,
     cor: C.amarelo
   }, {
-    label: `Receita bruta — ${nmCurto}`,
-    value: fmtBRL(data.recBruta),
+    label: "Receita bruta — " + nmCurto,
+    value: fmtBRL(data.recAluguel),
     cor: C.azul
   }, {
-    label: `Despesas — ${nmCurto}`,
+    label: "Despesas imóveis — " + nmCurto,
     value: fmtBRL(data.despIm),
     cor: C.verm
   }, {
-    label: `Comissão 10% — ${nmCurto}`,
+    label: "Despesas locadores — " + nmCurto,
+    value: fmtBRL(data.despLoc),
+    cor: C.verm
+  }, {
+    label: "Comissão 10% — " + nmCurto,
     value: fmtBRL(data.comissao),
     cor: C.roxo
   }, {
-    label: `Receita líq. — ${nmCurto}`,
+    label: "Receita líq. — " + nmCurto,
     value: fmtBRL(data.recLiq),
     cor: C.verde
   }];
@@ -600,7 +652,7 @@ function PageDashboard({
       alignItems: "center",
       gap: 8,
       padding: "6px 0",
-      borderBottom: `1px solid ${C.borda}`
+      borderBottom: "1px solid " + C.borda
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -646,7 +698,7 @@ function PageDashboard({
         alignItems: "center",
         justifyContent: "space-between",
         padding: "6px 0",
-        borderBottom: `1px solid ${C.borda}`
+        borderBottom: "1px solid " + C.borda
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -666,8 +718,9 @@ function PageImoveis({
 }) {
   const [rows, setRows] = useState([]);
   const [busca, setBusca] = useState("");
+  const [imovelSel, setImovelSel] = useState(null);
   useEffect(() => {
-    sbClient.from("imoveis").select("id,nome,tipo,status,endereco,bairro,cidade,valor_aluguel,proprietario,obs").eq("cliente_id", clienteId).order("nome").then(r => setRows(r.data || []));
+    sbClient.from("imoveis").select("*").eq("cliente_id", clienteId).order("nome").then(r => setRows(r.data || []));
   }, [clienteId]);
   const statusMap = {
     alugado: {
@@ -729,8 +782,12 @@ function PageImoveis({
     const idLocal = r.id?.split("_").pop() || r.id;
     return /*#__PURE__*/React.createElement("tr", {
       key: r.id,
+      style: {
+        cursor: "pointer"
+      },
       onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
-      onMouseLeave: e => e.currentTarget.style.background = ""
+      onMouseLeave: e => e.currentTarget.style.background = "",
+      onClick: () => setImovelSel(r)
     }, /*#__PURE__*/React.createElement("td", {
       style: {
         ...css.td,
@@ -758,7 +815,11 @@ function PageImoveis({
       color: C.texto2,
       textAlign: "center"
     }
-  }, "Nenhum im\xF3vel encontrado.")));
+  }, "Nenhum im\xF3vel encontrado.")), imovelSel && /*#__PURE__*/React.createElement(ModalImovel, {
+    imovel: imovelSel,
+    clienteId: clienteId,
+    onClose: () => setImovelSel(null)
+  }));
 }
 
 // =============================================================================
@@ -770,6 +831,7 @@ function PageContratos({
   const [rows, setRows] = useState([]);
   const [imoveisMap, setImoveisMap] = useState({});
   const [busca, setBusca] = useState("");
+  const [contratoSel, setContratoSel] = useState(null);
   useEffect(() => {
     Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("contratos").select("id,locatario,valor,inicio,fim,prox_reajuste,indice,status,garantia,imovel_id").eq("cliente_id", clienteId).order("status").order("fim")]).then(([ims, cts]) => {
       const m = {};
@@ -813,8 +875,12 @@ function PageContratos({
     const corFim = d == null ? "" : d <= 15 ? C.verm : d <= 90 ? C.amarelo : C.texto;
     return /*#__PURE__*/React.createElement("tr", {
       key: r.id,
+      style: {
+        cursor: "pointer"
+      },
       onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
-      onMouseLeave: e => e.currentTarget.style.background = ""
+      onMouseLeave: e => e.currentTarget.style.background = "",
+      onClick: () => setContratoSel(r)
     }, /*#__PURE__*/React.createElement("td", {
       style: css.td
     }, imoveisMap[r.imovel_id] || "—"), /*#__PURE__*/React.createElement("td", {
@@ -838,7 +904,11 @@ function PageContratos({
     }, /*#__PURE__*/React.createElement("span", {
       style: css.badge(r.status === "ativo" ? C.verde : C.texto2, r.status === "ativo" ? C.verde_bg : "#eee")
     }, r.status)));
-  })))));
+  })))), contratoSel && /*#__PURE__*/React.createElement(ModalContrato, {
+    contrato: contratoSel,
+    imNome: imoveisMap[contratoSel.imovel_id] || "—",
+    onClose: () => setContratoSel(null)
+  }));
 }
 
 // =============================================================================
@@ -1323,28 +1393,70 @@ function PageAdministradora({
 }) {
   const [rows, setRows] = useState([]);
   const [config, setConfig] = useState([]);
+  const [comissoes, setComissoes] = useState([]);
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth() + 1);
-  const mesStr = `${ano}-${String(mes).padStart(2, "0")}`;
-  const [receitaMes, setReceitaMes] = useState(0);
   useEffect(() => {
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+
     // Saídas do mês
-    sbClient.from("adm_saidas").select("id,descricao,valor,mes,pago_em,status,categoria,competencia,fixo").eq("cliente_id", clienteId).like("mes", mesStr + "%").order("mes").then(r => setRows(r.data || []));
-
-    // Config de itens mensais
-    sbClient.from("adm_saidas_config").select("id,descricao,valor_padrao,categoria").eq("cliente_id", clienteId).then(r => setConfig(r.data || []));
-
-    // Receita de aluguéis pagos no mês
-    sbClient.from("pagamentos").select("valor,tipo,status,pago_em").eq("cliente_id", clienteId).eq("tipo", "aluguel").eq("status", "pago").like("pago_em", mesStr + "%").then(r => {
-      const total = (r.data || []).reduce((s, p) => s + (p.valor || 0), 0);
-      setReceitaMes(total);
+    sbClient.from("adm_saidas").select("id,descricao,valor,mes,pago_em,status,categoria,competencia,fixo,vencimento").eq("cliente_id", clienteId).like("mes", ms + "%").order("mes").then(function (r) {
+      setRows(r.data || []);
     });
-  }, [clienteId, mesStr]);
-  const comissao = receitaMes * 0.10;
-  const totalSaidas = rows.reduce((s, r) => s + (r.valor || 0), 0);
-  const totalPago = rows.filter(r => r.status === "pago").reduce((s, r) => s + (r.valor || 0), 0);
-  const totalPend = rows.filter(r => r.status !== "pago").reduce((s, r) => s + (r.valor || 0), 0);
-  const saldo = comissao - totalSaidas;
+
+    // Config
+    sbClient.from("adm_saidas_config").select("id,descricao,valor_padrao,categoria").eq("cliente_id", clienteId).then(function (r) {
+      setConfig(r.data || []);
+    });
+
+    // Aluguéis recebidos no mês — comissão sobre valor do CONTRATO (não do recebido)
+    Promise.all([sbClient.from("imoveis").select("id,nome,valor_aluguel").eq("cliente_id", clienteId), sbClient.from("contratos").select("id,imovel_id,locatario,valor").eq("cliente_id", clienteId), sbClient.from("pagamentos").select("id,imovel_id,valor,tipo,status,pago_em").eq("cliente_id", clienteId).eq("tipo", "aluguel").eq("status", "pago").like("pago_em", ms + "%")]).then(function ([ri, rc, rp]) {
+      const imMap = {};
+      (ri.data || []).forEach(function (i) {
+        imMap[i.id] = i;
+      });
+      // Mapa de contrato por imovel_id — pega o mais recente ativo
+      const ctMap = {};
+      (rc.data || []).sort(function (a, b) {
+        return b.id > a.id ? 1 : -1;
+      }).forEach(function (c) {
+        if (!ctMap[c.imovel_id]) ctMap[c.imovel_id] = c;
+      });
+      const lista = (rp.data || []).map(function (p) {
+        const im = imMap[p.imovel_id] || {};
+        const ct = ctMap[p.imovel_id] || {};
+        // Valor do contrato para comissão (valor_aluguel do imóvel, que é sempre atualizado)
+        const valorContrato = parseFloat(im.valor_aluguel) || parseFloat(ct.valor) || 0;
+        return {
+          imovel: im.nome || "—",
+          locatario: ct.locatario || "—",
+          valor: parseFloat(p.valor) || 0,
+          comissao: Math.round(valorContrato * 0.10 * 100) / 100
+        };
+      });
+      setComissoes(lista);
+    });
+  }, [clienteId, ano, mes]);
+  const receitaMes = comissoes.reduce(function (s, c) {
+    return s + c.valor;
+  }, 0);
+  const comissaoTotal = comissoes.reduce(function (s, c) {
+    return s + c.comissao;
+  }, 0);
+  const totalSaidas = rows.reduce(function (s, r) {
+    return s + (r.valor || 0);
+  }, 0);
+  const totalPago = rows.filter(function (r) {
+    return r.status === "pago";
+  }).reduce(function (s, r) {
+    return s + (r.valor || 0);
+  }, 0);
+  const totalPend = rows.filter(function (r) {
+    return r.status !== "pago";
+  }).reduce(function (s, r) {
+    return s + (r.valor || 0);
+  }, 0);
+  const saldo = comissaoTotal - totalSaidas;
   const statusCores = {
     pago: {
       cor: C.verde,
@@ -1413,7 +1525,7 @@ function PageAdministradora({
     cor: C.azul
   }), /*#__PURE__*/React.createElement(KpiCard, {
     label: "Comiss\xE3o 10%",
-    value: fmtBRL(comissao),
+    value: fmtBRL(comissaoTotal),
     cor: C.roxo
   }), /*#__PURE__*/React.createElement(KpiCard, {
     label: "Sa\xEDdas previstas",
@@ -1433,20 +1545,73 @@ function PageAdministradora({
     cor: saldo >= 0 ? C.verde : C.verm,
     sub: saldo >= 0 ? "✓ Positivo" : "⚠ Negativo"
   })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...css.card,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10,
+      color: C.verde
+    }
+  }, "Comiss\xF5es do m\xEAs \u2014 este cliente"), comissoes.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.texto2,
+      fontSize: 13
+    }
+  }, "Nenhum aluguel recebido no m\xEAs.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Imóvel", "Locatário", "Aluguel recebido", "Comissão 10%"].map(function (h) {
+    return /*#__PURE__*/React.createElement("th", {
+      key: h,
+      style: css.th
+    }, h);
+  }))), /*#__PURE__*/React.createElement("tbody", null, comissoes.map(function (c, i) {
+    return /*#__PURE__*/React.createElement("tr", {
+      key: i,
+      onMouseEnter: function (e) {
+        e.currentTarget.style.background = "#f9f7f3";
+      },
+      onMouseLeave: function (e) {
+        e.currentTarget.style.background = "";
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, c.imovel), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, c.locatario), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtBRL(c.valor)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: C.verde,
+        fontWeight: 600
+      }
+    }, "10% de ", fmtBRL(c.valor), " = ", fmtBRL(c.comissao)));
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right",
+      fontWeight: 700,
+      marginTop: 8,
+      color: C.verde
+    }
+  }, "Total comiss\xF5es: ", fmtBRL(comissaoTotal)))), /*#__PURE__*/React.createElement("div", {
     style: css.card
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 700,
-      marginBottom: 12
+      marginBottom: 12,
+      color: C.verm
     }
-  }, "Sa\xEDdas \u2014 ", mesNomes[mes - 1], " ", ano, rows.length === 0 && config.length > 0 && /*#__PURE__*/React.createElement("span", {
+  }, "Sa\xEDdas \u2014 Despesas da administradora", rows.length === 0 && config.length > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       color: C.texto2,
       fontWeight: 400,
       marginLeft: 8
     }
-  }, "(nenhum lan\xE7amento neste m\xEAs \u2014 ", config.length, " item(ns) configurado(s))")), rows.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "(nenhum lan\xE7amento \u2014 ", config.length, " item(ns) configurado(s))")), rows.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 24,
       color: C.texto2,
@@ -1454,30 +1619,43 @@ function PageAdministradora({
     }
   }, "Nenhuma sa\xEDda lan\xE7ada neste m\xEAs.") : /*#__PURE__*/React.createElement("table", {
     style: css.table
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Descrição", "Categoria", "Competência", "Valor", "Pago em", "Status", "Fixo"].map(h => /*#__PURE__*/React.createElement("th", {
-    key: h,
-    style: css.th
-  }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["ID", "Categoria", "Descrição", "Valor", "Vencimento", "Pago em", "Status", "Fixo"].map(function (h) {
+    return /*#__PURE__*/React.createElement("th", {
+      key: h,
+      style: css.th
+    }, h);
+  }))), /*#__PURE__*/React.createElement("tbody", null, rows.map(function (r) {
     const sc = statusCores[r.status] || {
       cor: C.texto2,
       bg: "#eee"
     };
     const cc = catCores[r.categoria?.toLowerCase()] || catCores.outros;
+    const idLocal = r.id?.split("_").pop() || r.id;
     return /*#__PURE__*/React.createElement("tr", {
       key: r.id,
-      onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
-      onMouseLeave: e => e.currentTarget.style.background = ""
+      onMouseEnter: function (e) {
+        e.currentTarget.style.background = "#f9f7f3";
+      },
+      onMouseLeave: function (e) {
+        e.currentTarget.style.background = "";
+      }
     }, /*#__PURE__*/React.createElement("td", {
-      style: css.td
-    }, /*#__PURE__*/React.createElement("strong", null, r.descricao || "—")), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: C.texto2,
+        fontSize: 11
+      }
+    }, idLocal), /*#__PURE__*/React.createElement("td", {
       style: css.td
     }, /*#__PURE__*/React.createElement("span", {
       style: css.badge(cc.cor, cc.bg)
     }, r.categoria || "—")), /*#__PURE__*/React.createElement("td", {
       style: css.td
-    }, r.competencia || r.mes || "—"), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("strong", null, r.descricao || "—")), /*#__PURE__*/React.createElement("td", {
       style: css.td
     }, fmtBRL(r.valor)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(r.vencimento)), /*#__PURE__*/React.createElement("td", {
       style: css.td
     }, fmtData(r.pago_em)), /*#__PURE__*/React.createElement("td", {
       style: css.td
@@ -1503,35 +1681,1345 @@ function PageAdministradora({
       gap: 8,
       flexWrap: "wrap"
     }
-  }, config.map(c => /*#__PURE__*/React.createElement("div", {
-    key: c.id,
+  }, config.map(function (c) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: c.id,
+      style: {
+        background: "#f9f7f3",
+        border: "1px solid " + C.borda,
+        borderRadius: 6,
+        padding: "6px 12px",
+        fontSize: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, c.descricao), c.valor_padrao && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.texto2,
+        marginLeft: 6
+      }
+    }, fmtBRL(c.valor_padrao)), c.categoria && /*#__PURE__*/React.createElement("span", {
+      style: {
+        ...css.badge(C.texto2, "#eee"),
+        marginLeft: 6
+      }
+    }, c.categoria));
+  }))));
+}
+
+// =============================================================================
+// DÉBITOS PARCIAIS
+// =============================================================================
+function PageDebitosParciais({
+  clienteId
+}) {
+  const [contratos, setContratos] = useState([]);
+  const [contratoId, setContratoId] = useState("");
+  const [parciais, setParciais] = useState([]);
+  const [saldoInfo, setSaldoInfo] = useState(null);
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  const [imMap, setImMap] = useState({});
+  const [allPags, setAllPags] = useState([]);
+  const [allParciais, setAllParciais] = useState([]);
+
+  // Carrega dados base ao mudar cliente
+  useEffect(() => {
+    Promise.all([sbClient.from("imoveis").select("id,nome").eq("cliente_id", clienteId), sbClient.from("contratos").select("*").eq("cliente_id", clienteId).eq("status", "ativo"), sbClient.from("pagamentos").select("id,imovel_id,valor,tipo,status,pago_em,vencimento").eq("cliente_id", clienteId).eq("tipo", "aluguel").eq("status", "pago"), sbClient.from("pagamentos_parciais").select("*").eq("cliente_id", clienteId)]).then(function ([ri, rc, rp, rpp]) {
+      const m = {};
+      (ri.data || []).forEach(function (i) {
+        m[i.id] = i.nome;
+      });
+      setImMap(m);
+      setContratos(rc.data || []);
+      setAllPags(rp.data || []);
+      setAllParciais(rpp.data || []);
+      if ((rc.data || []).length > 0) setContratoId((rc.data || [])[0].id);
+    });
+  }, [clienteId]);
+
+  // Carrega parciais do mês selecionado
+  useEffect(() => {
+    if (!contratoId) return;
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    sbClient.from("pagamentos_parciais").select("*").eq("cliente_id", clienteId).eq("contrato_id", contratoId).like("mes_ref", ms + "%").order("data_pagamento").then(function (r) {
+      setParciais(r.data || []);
+    });
+  }, [clienteId, contratoId, ano, mes]);
+
+  // Calcula saldo ao mudar contrato
+  useEffect(() => {
+    if (!contratoId || contratos.length === 0) return;
+    const ct = contratos.find(function (c) {
+      return c.id === contratoId;
+    });
+    if (!ct) return;
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    const aluguelMes = parseFloat(ct.valor) || 0;
+    const iptuCt = parseFloat(ct.iptu_contrato) || 0;
+    const diaVcto = parseInt(ct.dia_vencimento) || 10;
+
+    // Só computa débito do mês se o vencimento já passou (igual ao py)
+    const mesLim = mesLimiteVencido(diaVcto);
+    const totalEsp = ms <= mesLim ? aluguelMes + iptuCt : 0;
+
+    // Pago no mês (parciais + normal)
+    const parcMes = allParciais.filter(function (p) {
+      return p.contrato_id === contratoId && p.mes_ref && p.mes_ref.indexOf(ms) === 0;
+    }).reduce(function (s, p) {
+      return s + (parseFloat(p.valor) || 0);
+    }, 0);
+    const pagNormal = allPags.filter(function (p) {
+      return p.imovel_id === ct.imovel_id && (p.pago_em && p.pago_em.indexOf(ms) === 0 || p.vencimento && p.vencimento.indexOf(ms) === 0);
+    }).reduce(function (s, p) {
+      return s + (parseFloat(p.valor) || 0);
+    }, 0);
+    const totalPagoMes = parcMes + pagNormal;
+    const saldoMes = Math.max(0, totalEsp - totalPagoMes);
+
+    // Saldo devedor acumulado
+    const saldoIniVal = parseFloat(ct.saldo_inicial_devedor) || 0;
+    const saldoIniMes = (ct.saldo_inicial_mes || "").substring(0, 7);
+    const mensalidade = aluguelMes + iptuCt;
+
+    // Mês limite: só meses cujo vencimento já passou
+    const mesLimite = mesLimiteVencido(diaVcto);
+
+    // Total acrescido desde mês seguinte ao saldo inicial
+    let totalAcrescido = 0;
+    if (saldoIniMes) {
+      let anoI = parseInt(saldoIniMes.substring(0, 4));
+      let mesI = parseInt(saldoIniMes.substring(5, 7)) + 1;
+      if (mesI > 12) {
+        mesI = 1;
+        anoI++;
+      }
+      let mesIter = anoI + "-" + String(mesI).padStart(2, "0");
+      while (mesIter <= mesLimite) {
+        totalAcrescido += mensalidade;
+        let ai = parseInt(mesIter.substring(0, 4)),
+          mi = parseInt(mesIter.substring(5, 7)) + 1;
+        if (mi > 12) {
+          mi = 1;
+          ai++;
+        }
+        mesIter = ai + "-" + String(mi).padStart(2, "0");
+      }
+    }
+
+    // Total pago geral (parciais + normais desde mês seguinte ao saldo inicial)
+    let totalParciais = 0,
+      totalNormal = 0;
+    if (saldoIniMes) {
+      let anoI = parseInt(saldoIniMes.substring(0, 4)),
+        mesI = parseInt(saldoIniMes.substring(5, 7)) + 1;
+      if (mesI > 12) {
+        mesI = 1;
+        anoI++;
+      }
+      const mesSeg = anoI + "-" + String(mesI).padStart(2, "0");
+      totalParciais = allParciais.filter(function (p) {
+        return p.contrato_id === contratoId && p.data_pagamento && p.data_pagamento >= mesSeg + "-01";
+      }).reduce(function (s, p) {
+        return s + (parseFloat(p.valor) || 0);
+      }, 0);
+      totalNormal = allPags.filter(function (p) {
+        return p.imovel_id === ct.imovel_id && (p.pago_em && p.pago_em.substring(0, 7) >= mesSeg || p.vencimento && p.vencimento.substring(0, 7) >= mesSeg);
+      }).reduce(function (s, p) {
+        return s + (parseFloat(p.valor) || 0);
+      }, 0);
+    } else {
+      totalParciais = allParciais.filter(function (p) {
+        return p.contrato_id === contratoId;
+      }).reduce(function (s, p) {
+        return s + (parseFloat(p.valor) || 0);
+      }, 0);
+      totalNormal = allPags.filter(function (p) {
+        return p.imovel_id === ct.imovel_id;
+      }).reduce(function (s, p) {
+        return s + (parseFloat(p.valor) || 0);
+      }, 0);
+    }
+    const totalPagoGeral = totalParciais + totalNormal;
+    const saldoAcumulado = saldoIniVal > 0 ? Math.max(0, saldoIniVal + totalAcrescido - totalPagoGeral) : 0;
+    setSaldoInfo({
+      aluguelMes: totalEsp,
+      totalPagoMes,
+      saldoMes,
+      totalPagoMes,
+      saldoAcumulado
+    });
+  }, [contratoId, contratos, ano, mes, allPags, allParciais]);
+  const ctAtual = contratos.find(function (c) {
+    return c.id === contratoId;
+  }) || null;
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      marginBottom: 16
+    }
+  }, "D\xE9bitos e Pagamentos Parciais"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      alignItems: "flex-end",
+      marginBottom: 16,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.texto2,
+      marginBottom: 4
+    }
+  }, "Inquilino"), /*#__PURE__*/React.createElement("select", {
+    value: contratoId,
+    onChange: function (e) {
+      setContratoId(e.target.value);
+    },
+    style: {
+      ...css.input,
+      width: 300
+    }
+  }, contratos.map(function (c) {
+    return /*#__PURE__*/React.createElement("option", {
+      key: c.id,
+      value: c.id
+    }, c.locatario || "—", " \u2014 ", imMap[c.imovel_id] || "—");
+  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.texto2,
+      marginBottom: 4
+    }
+  }, "M\xEAs ref."), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: function (a, m) {
+      setAno(a);
+      setMes(m);
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "3fr 1fr",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10,
+      color: C.amarelo,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: .5
+    }
+  }, "Hist\xF3rico de Pagamentos"), parciais.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhum pagamento parcial registrado neste m\xEAs.") : /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["ID", "Data", "Mês ref.", "Valor", "Obs"].map(function (h) {
+    return /*#__PURE__*/React.createElement("th", {
+      key: h,
+      style: css.th
+    }, h);
+  }))), /*#__PURE__*/React.createElement("tbody", null, parciais.map(function (p) {
+    const idLocal = (p.id || "").split("_").pop();
+    return /*#__PURE__*/React.createElement("tr", {
+      key: p.id,
+      onMouseEnter: function (e) {
+        e.currentTarget.style.background = "#f9f7f3";
+      },
+      onMouseLeave: function (e) {
+        e.currentTarget.style.background = "";
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...css.td,
+        color: C.texto2,
+        fontSize: 11
+      }
+    }, idLocal), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, fmtData(p.data_pagamento)), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, p.mes_ref || "—"), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, /*#__PURE__*/React.createElement("strong", null, fmtBRL(p.valor))), /*#__PURE__*/React.createElement("td", {
+      style: css.td
+    }, p.obs || "—"));
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, saldoInfo && [{
+    label: "Aluguel " + ano + "-" + String(mes).padStart(2, "0"),
+    value: fmtBRL(saldoInfo.aluguelMes),
+    cor: C.azul
+  }, {
+    label: "Pago em " + ano + "-" + String(mes).padStart(2, "0"),
+    value: fmtBRL(saldoInfo.totalPagoMes),
+    cor: C.verde
+  }, {
+    label: "Saldo " + ano + "-" + String(mes).padStart(2, "0"),
+    value: fmtBRL(saldoInfo.saldoMes),
+    cor: C.verm
+  }, {
+    label: "Total pago",
+    value: fmtBRL(saldoInfo.totalPagoMes),
+    cor: C.azul
+  }, {
+    label: "Saldo devedor acumulado",
+    value: fmtBRL(saldoInfo.saldoAcumulado),
+    cor: C.verm
+  }].map(function (s, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        ...css.card,
+        borderLeft: "4px solid " + s.cor
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: C.texto2,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        marginBottom: 4
+      }
+    }, s.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 700,
+        color: s.cor
+      }
+    }, s.value));
+  }))));
+}
+
+// =============================================================================
+// PRESTAÇÃO DE CONTAS
+// =============================================================================
+function PagePrestacaoContas({
+  clienteId
+}) {
+  const [dados, setDados] = useState([]);
+  const [despLoc, setDespLoc] = useState([]);
+  const [cliNome, setCliNome] = useState("");
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  useEffect(() => {
+    setDados([]);
+    setDespLoc([]);
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    Promise.all([sbClient.from("clientes").select("*").eq("id", clienteId), sbClient.from("imoveis").select("*").eq("cliente_id", clienteId).eq("status", "alugado").order("nome"), sbClient.from("contratos").select("*").eq("cliente_id", clienteId).in("status", ["ativo", "inativo", "encerrado"]), sbClient.from("pagamentos").select("*").eq("cliente_id", clienteId), sbClient.from("despesas_locadores").select("*").eq("cliente_id", clienteId)]).then(function ([rcl, rim, rct, rpag, rdl]) {
+      const cli = (rcl.data || [])[0] || {};
+      setCliNome(cli.empresa || cli.nome || "");
+      const ims = rim.data || [];
+      const cts = rct.data || [];
+      const pags = rpag.data || [];
+      const dl = rdl.data || [];
+
+      // Despesas locadores do mês
+      const despLocMes = dl.filter(function (d) {
+        return d.vencimento && d.vencimento.indexOf(ms) === 0 || d.pago_em && d.pago_em.indexOf(ms) === 0;
+      });
+      setDespLoc(despLocMes);
+
+      // Para cada imóvel alugado, monta o bloco
+      const resultado = ims.map(function (im) {
+        // Contrato ativo ou mais recente
+        const ct = cts.filter(function (c) {
+          return c.imovel_id === im.id;
+        }).sort(function (a, b) {
+          // Prioriza ativo, depois mais recente pelo id
+          if (a.status === "ativo" && b.status !== "ativo") return -1;
+          if (b.status === "ativo" && a.status !== "ativo") return 1;
+          return b.id > a.id ? 1 : -1;
+        })[0] || null;
+
+        // Pagamento do mês (pago_em ou vencimento no mês)
+        const pag = pags.find(function (p) {
+          return p.imovel_id === im.id && p.tipo === "aluguel" && (p.pago_em && p.pago_em.indexOf(ms) === 0 || p.vencimento && p.vencimento.indexOf(ms) === 0);
+        }) || null;
+        if (!ct && !pag) return null;
+
+        // Lógica idêntica ao gestimovel.py _carregar_dados()
+        const valor = im.valor_aluguel || ct && ct.valor || 0;
+        const desconto = ct ? parseFloat(ct.desconto_mensal) || 0 : 0;
+        const descTxt = ct ? ct.desconto_descricao || "Crédito despesas (luz)" : "";
+        const rateio = ct ? parseFloat(ct.rateio_luz) || 0 : 0;
+        const iptu = parseFloat(im.iptu_parcela) || 0;
+        const cond = parseFloat(im.condominio) || 0;
+        const irpf = parseFloat(im.irpf_retencao) || 0;
+        const comissao = Math.round(valor * 0.10 * 100) / 100;
+        const cpfLoc = ct ? ct.cpf_locatario || "" : "";
+        const cpfDigits = cpfLoc.replace(/[^0-9]/g, "");
+        const isPj = cpfDigits.length === 14;
+        const totalPagar = valor + iptu - desconto + rateio - irpf;
+        const recebido = pag && pag.status === "pago" ? pag.valor || 0 : null;
+        const dataRecebido = pag && pag.pago_em ? fmtData(pag.pago_em) : null;
+        const liquido = recebido ? recebido - comissao : 0;
+        const pagStatus = pag ? pag.status : null;
+        const locatario = ct ? ct.locatario || "—" : (pag && pag.descricao || "—").replace("Pix de ", "").replace("Pix via ", "");
+        const prop = im.proprietario || "";
+        const prop2 = im.proprietario2 || "";
+        const propTxt = prop2 ? prop + " e " + prop2 : prop;
+        const diaVcto = ct ? ct.dia_vencimento || 10 : 10;
+        return {
+          im,
+          ct,
+          imovel: im.nome,
+          proprietario: propTxt,
+          locatario,
+          cpf: cpfLoc,
+          isPj,
+          valor,
+          desconto,
+          descTxt,
+          rateio,
+          iptu,
+          cond,
+          irpf,
+          comissao,
+          totalPagar,
+          recebido,
+          dataRecebido,
+          liquido,
+          pagStatus,
+          diaVcto
+        };
+      }).filter(Boolean);
+      setDados(resultado);
+    });
+  }, [clienteId, ano, mes]);
+  const pf = dados.filter(function (d) {
+    return !d.isPj;
+  });
+  const pj = dados.filter(function (d) {
+    return d.isPj;
+  });
+  const totalComissoes = dados.filter(function (d) {
+    return d.recebido;
+  }).reduce(function (s, d) {
+    return s + d.comissao;
+  }, 0);
+  const totalRecebido = dados.reduce(function (s, d) {
+    return s + (d.recebido || 0);
+  }, 0);
+  const totalAlugueis = dados.reduce(function (s, d) {
+    return s + d.valor;
+  }, 0);
+  const totalIptuAlug = dados.filter(function (d) {
+    return d.recebido;
+  }).reduce(function (s, d) {
+    return s + d.iptu;
+  }, 0);
+  const totalDespLoc = despLoc.filter(function (d) {
+    return (d.categoria || "").toUpperCase() !== "IPTU";
+  }).reduce(function (s, d) {
+    return s + (d.valor || 0);
+  }, 0);
+  const totalIptuLoc = despLoc.filter(function (d) {
+    return (d.categoria || "").toUpperCase() === "IPTU";
+  }).reduce(function (s, d) {
+    return s + (d.valor || 0);
+  }, 0);
+  const totalIptu = totalIptuAlug + totalIptuLoc;
+  const saldo = totalRecebido - totalComissoes - totalIptu - totalDespLoc;
+  function BlocoImovel({
+    d
+  }) {
+    const corBorda = d.isPj ? C.roxo : C.azul;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 10,
+        border: "1px solid " + C.borda,
+        borderRadius: 8,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 3,
+        background: corBorda
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#f5f2ec",
+        padding: "7px 14px",
+        display: "flex",
+        justifyContent: "space-between",
+        borderBottom: "1px solid " + C.borda
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, d.imovel), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.texto2
+      }
+    }, d.proprietario)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "4px 14px 8px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "5px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, d.locatario, d.cpf ? " · " + (d.isPj ? "CNPJ" : "CPF") + " " + d.cpf : "", " — Aluguel  ", d.pagStatus === "pago" ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.verde
+      }
+    }, "\u2705 Recebido em ", d.dataRecebido) : /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.amarelo
+      }
+    }, "\u23F3 A vencer dia ", d.diaVcto)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 600,
+        color: C.azul,
+        marginLeft: 16,
+        whiteSpace: "nowrap"
+      }
+    }, fmtBRL(d.valor))), d.iptu > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "IPTU \u2014 presta\xE7\xE3o (parcela mensal)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.azul
+      }
+    }, fmtBRL(d.iptu))), d.desconto > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, d.descTxt || "Desconto"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.verm
+      }
+    }, "-", fmtBRL(d.desconto))), d.rateio > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "D\xE9bito Despesas (Rateio Luz)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.verde
+      }
+    }, fmtBRL(d.rateio))), d.cond > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "Condom\xEDnio"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.azul
+      }
+    }, fmtBRL(d.cond))), d.irpf > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "(-) Reten\xE7\xE3o IRPF (retido pelo locat\xE1rio)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.verm
+      }
+    }, "-", fmtBRL(d.irpf))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 1,
+        background: C.borda,
+        margin: "5px 0"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13,
+        fontWeight: 700
+      }
+    }, /*#__PURE__*/React.createElement("div", null, "Total a pagar"), /*#__PURE__*/React.createElement("div", null, fmtBRL(d.totalPagar))), d.recebido ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "Valor recebido em  ", d.dataRecebido), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.azul
+      }
+    }, fmtBRL(d.recebido))) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto3
+      }
+    }, "Valor recebido em  \u2014"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto3
+      }
+    }, "\u2014")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "Comiss\xE3o (10%)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.azul
+      }
+    }, fmtBRL(d.comissao))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 1,
+        background: C.borda,
+        margin: "5px 0"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13,
+        fontWeight: 700
+      }
+    }, /*#__PURE__*/React.createElement("div", null, "L\xEDquido ao Locador"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: d.liquido > 0 ? C.verde : C.texto2
+      }
+    }, fmtBRL(d.liquido)))));
+  }
+  const nmMes = mesNomes[mes - 1] + " " + ano;
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Presta\xE7\xE3o de Contas"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...css.card,
+      marginBottom: 12,
+      background: "#f9f7f3",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14
+    }
+  }, cliNome, " \u2014 Presta\xE7\xE3o de Contas \u2014 ", nmMes), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.texto2
+    }
+  }, "Gerado: ", new Date().toLocaleDateString("pt-BR"))), pf.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.azul,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 8
+    }
+  }, "Loca\xE7\xF5es \u2014 Pessoas F\xEDsicas"), pf.map(function (d, i) {
+    return /*#__PURE__*/React.createElement(BlocoImovel, {
+      key: i,
+      d: d
+    });
+  })), pj.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.roxo,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 8,
+      marginTop: 16
+    }
+  }, "Loca\xE7\xF5es \u2014 Pessoas Jur\xEDdicas"), pj.map(function (d, i) {
+    return /*#__PURE__*/React.createElement(BlocoImovel, {
+      key: i,
+      d: d
+    });
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...css.card,
+      marginTop: 16,
+      borderTop: "3px solid " + C.accent
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 10,
+      color: C.accent,
+      textTransform: "uppercase",
+      fontSize: 11,
+      letterSpacing: 1
+    }
+  }, "Resumo Geral"), [{
+    label: "Valor total dos aluguéis",
+    value: "•••••",
+    cor: C.texto2
+  }, {
+    label: "Total comissões",
+    value: fmtBRL(totalComissoes),
+    cor: C.azul
+  }, {
+    label: "Total recebido em conta da administradora",
+    value: fmtBRL(totalRecebido),
+    cor: C.azul
+  }, {
+    label: "Despesas com IPTUs (alugados + moradia/vagos)",
+    value: "•••••",
+    cor: C.texto2
+  }].map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "5px 0",
+        borderBottom: "1px solid " + C.borda,
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, r.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: r.cor
+      }
+    }, r.value));
+  }), despLoc.filter(function (d) {
+    return (d.categoria || "").toUpperCase() !== "IPTU";
+  }).map(function (d, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "5px 0",
+        borderBottom: "1px solid " + C.borda,
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, "Despesa Locadores \u2014 ", d.descricao || d.categoria || "—"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.azul
+      }
+    }, fmtBRL(d.valor)));
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      padding: "6px 0",
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, /*#__PURE__*/React.createElement("div", null, "L\xEDquido a transferir"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.verde
+    }
+  }, fmtBRL(saldo)))));
+}
+
+// =============================================================================
+// MODAL DETALHES DO CONTRATO
+// =============================================================================
+function ModalContrato({
+  contrato,
+  imNome,
+  onClose
+}) {
+  if (!contrato) return null;
+  const campos = [["Imóvel", imNome], ["Locatário", contrato.locatario], ["CPF/CNPJ", contrato.cpf_locatario], ["Telefone", contrato.telefone], ["E-mail", contrato.email], ["Valor aluguel", fmtBRL(contrato.valor)], ["Início", fmtData(contrato.inicio)], ["Fim", fmtData(contrato.fim)], ["Próx. reajuste", fmtData(contrato.prox_reajuste)], ["Índice", contrato.indice], ["Dia vencimento", contrato.dia_vencimento], ["Garantia", contrato.garantia], ["IPTU contrato", fmtBRL(contrato.iptu_contrato)], ["Desconto mensal", fmtBRL(contrato.desconto_mensal)], ["Desc. descrição", contrato.desconto_descricao], ["Rateio luz", fmtBRL(contrato.rateio_luz)], ["Despesa extra", contrato.despesa_extra_desc], ["Desp. extra valor", fmtBRL(contrato.despesa_extra_valor)], ["Saldo dev. inicial", fmtBRL(contrato.saldo_inicial_devedor)], ["Status", contrato.status], ["Obs", contrato.obs]].filter(function (r) {
+    return r[1] && r[1] !== "—" && r[1] !== fmtBRL(0) && r[1] !== fmtBRL(null);
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 10,
+      padding: 24,
+      width: 520,
+      maxHeight: "85vh",
+      overflow: "auto",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+    },
+    onClick: function (e) {
+      e.stopPropagation();
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 16
+    }
+  }, "Detalhes do Contrato"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "none",
+      border: "none",
+      fontSize: 20,
+      cursor: "pointer",
+      color: C.texto2
+    }
+  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#f9f7f3",
-      border: `1px solid ${C.borda}`,
-      borderRadius: 6,
-      padding: "6px 12px",
-      fontSize: 12
+      borderRadius: 8,
+      padding: 12
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, campos.map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "5px 0",
+        fontSize: 13,
+        borderBottom: "1px solid " + C.borda
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, r[0]), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 500,
+        maxWidth: 280,
+        textAlign: "right"
+      }
+    }, r[1]));
+  }))));
+}
+
+// =============================================================================
+// MODAL DETALHES DO IMÓVEL
+// =============================================================================
+function ModalImovel({
+  imovel,
+  clienteId,
+  onClose
+}) {
+  const [contrato, setContrato] = useState(null);
+  const [seguro, setSeguro] = useState(null);
+  useEffect(() => {
+    if (!imovel) return;
+    Promise.all([sbClient.from("contratos").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).eq("status", "ativo").limit(1), sbClient.from("seguros").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).order("fim", {
+      ascending: false
+    }).limit(1)]).then(function ([rc, rs]) {
+      setContrato((rc.data || [])[0] || null);
+      setSeguro((rs.data || [])[0] || null);
+    });
+  }, [imovel, clienteId]);
+  if (!imovel) return null;
+  return /*#__PURE__*/React.createElement("div", {
     style: {
-      fontWeight: 600
-    }
-  }, c.descricao), c.valor_padrao && /*#__PURE__*/React.createElement("span", {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      color: C.texto2,
-      marginLeft: 6
+      background: "#fff",
+      borderRadius: 10,
+      padding: 24,
+      width: 520,
+      maxHeight: "85vh",
+      overflow: "auto",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+    },
+    onClick: function (e) {
+      e.stopPropagation();
     }
-  }, fmtBRL(c.valor_padrao)), c.categoria && /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      ...css.badge(C.texto2, "#eee"),
-      marginLeft: 6
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16
     }
-  }, c.categoria))))));
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 16
+    }
+  }, imovel.nome), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "none",
+      border: "none",
+      fontSize: 20,
+      cursor: "pointer",
+      color: C.texto2
+    }
+  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#f9f7f3",
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.amarelo,
+      textTransform: "uppercase",
+      marginBottom: 8
+    }
+  }, "Im\xF3vel"), [["Tipo", imovel.tipo], ["Endereço", imovel.endereco], ["Cidade", imovel.cidade], ["Status", imovel.status], ["Aluguel", fmtBRL(imovel.valor_aluguel)], ["IPTU parcela", fmtBRL(imovel.iptu_parcela)], ["Proprietário", imovel.proprietario], ["Proprietário 2", imovel.proprietario2], ["Matrícula", imovel.matricula]].filter(function (r) {
+    return r[1];
+  }).map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13,
+        borderBottom: "1px solid " + C.borda
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, r[0]), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 500
+      }
+    }, r[1]));
+  })), contrato && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#f0f7ff",
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.azul,
+      textTransform: "uppercase",
+      marginBottom: 8
+    }
+  }, "Contrato Ativo"), [["Locatário", contrato.locatario], ["CPF/CNPJ", contrato.cpf_locatario], ["Valor", fmtBRL(contrato.valor)], ["Início", fmtData(contrato.inicio)], ["Fim", fmtData(contrato.fim)], ["Próx. reajuste", fmtData(contrato.prox_reajuste)], ["Índice", contrato.indice], ["Garantia", contrato.garantia], ["Dia vencimento", contrato.dia_vencimento]].filter(function (r) {
+    return r[1];
+  }).map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13,
+        borderBottom: "1px solid #dbeafe"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, r[0]), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 500
+      }
+    }, r[1]));
+  })), seguro && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#f0fdf4",
+      borderRadius: 8,
+      padding: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.verde,
+      textTransform: "uppercase",
+      marginBottom: 8
+    }
+  }, "Seguro"), [["Seguradora", seguro.seguradora], ["Apólice", seguro.numero_apolice], ["Início", fmtData(seguro.inicio)], ["Vencimento", fmtData(seguro.fim)], ["Prêmio", fmtBRL(seguro.valor_premio)]].filter(function (r) {
+    return r[1];
+  }).map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "3px 0",
+        fontSize: 13,
+        borderBottom: "1px solid #d1fae5"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.texto2
+      }
+    }, r[0]), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 500
+      }
+    }, r[1]));
+  }))));
+}
+
+// =============================================================================
+// DASHBOARD GERAL (todos os clientes)
+// =============================================================================
+function PageDashboardGeral({
+  clientes,
+  onAbrirCliente
+}) {
+  const [data, setData] = useState(null);
+  const [ano, setAno] = useState(hoje.getFullYear());
+  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  useEffect(() => {
+    setData(null);
+    const ms = ano + "-" + String(mes).padStart(2, "0");
+    Promise.all(clientes.map(function (c) {
+      return Promise.all([sbClient.from("imoveis").select("id,status").eq("cliente_id", c.id), sbClient.from("pagamentos").select("id,tipo,valor,status,pago_em,imovel_id").eq("cliente_id", c.id).eq("status", "pago").like("pago_em", ms + "%"), sbClient.from("despesas_locadores").select("id,valor,pago_em,vencimento,categoria").eq("cliente_id", c.id)]).then(function ([ri, rp, rdl]) {
+        const ims = ri.data || [];
+        const pags = rp.data || [];
+        const dl = rdl.data || [];
+        const nim = ims.filter(function (i) {
+          return i.status !== "moradia";
+        }).length;
+        const nalg = ims.filter(function (i) {
+          return i.status === "alugado";
+        }).length;
+        const recAlg = pags.filter(function (p) {
+          return p.tipo === "aluguel";
+        }).reduce(function (s, p) {
+          return s + (parseFloat(p.valor) || 0);
+        }, 0);
+        const recOut = pags.filter(function (p) {
+          return p.tipo !== "aluguel";
+        }).reduce(function (s, p) {
+          return s + (parseFloat(p.valor) || 0);
+        }, 0);
+        const recBruta = recAlg + recOut;
+        const comissao = Math.round(recAlg * 0.10 * 100) / 100;
+        const despLoc = dl.filter(function (d) {
+          return d.pago_em && d.pago_em.indexOf(ms) === 0 || d.vencimento && d.vencimento.indexOf(ms) === 0;
+        }).reduce(function (s, d) {
+          return s + (parseFloat(d.valor) || 0);
+        }, 0);
+        return {
+          c,
+          nim,
+          nalg,
+          recBruta,
+          comissao,
+          despLoc,
+          liq: recBruta - comissao - despLoc
+        };
+      });
+    })).then(function (resultados) {
+      const totalIm = resultados.reduce(function (s, r) {
+        return s + r.nim;
+      }, 0);
+      const totalAlg = resultados.reduce(function (s, r) {
+        return s + r.nalg;
+      }, 0);
+      const totalRec = resultados.reduce(function (s, r) {
+        return s + r.recBruta;
+      }, 0);
+      const totalCom = resultados.reduce(function (s, r) {
+        return s + r.comissao;
+      }, 0);
+      const totalDesp = resultados.reduce(function (s, r) {
+        return s + r.despLoc;
+      }, 0);
+      const totalLiq = totalRec - totalCom - totalDesp;
+      setData({
+        resultados,
+        totalIm,
+        totalAlg,
+        totalRec,
+        totalCom,
+        totalDesp,
+        totalLiq
+      });
+    });
+  }, [clientes, ano, mes]);
+  if (!data) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 40,
+      color: C.texto2
+    }
+  }, "Carregando...");
+  const nm = mesNomes[mes - 1].substring(0, 3);
+  const kpis = [{
+    label: "Total imóveis",
+    value: data.totalIm,
+    cor: C.azul
+  }, {
+    label: "Alugados",
+    value: data.totalAlg,
+    cor: C.verde
+  }, {
+    label: "Receita bruta — " + nm,
+    value: fmtBRL(data.totalRec),
+    cor: C.azul
+  }, {
+    label: "Comissões — " + nm,
+    value: fmtBRL(data.totalCom),
+    cor: C.amarelo
+  }, {
+    label: "Desp. locadores — " + nm,
+    value: fmtBRL(data.totalDesp),
+    cor: C.roxo
+  }, {
+    label: "Receita líquida — " + nm,
+    value: fmtBRL(data.totalLiq),
+    cor: C.verde
+  }, {
+    label: "Clientes ativos",
+    value: clientes.length,
+    cor: C.roxo
+  }];
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Dashboard \u2014 Vis\xE3o Geral"), /*#__PURE__*/React.createElement(MesNav, {
+    ano: ano,
+    mes: mes,
+    onMudanca: (a, m) => {
+      setAno(a);
+      setMes(m);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+      marginBottom: 16
+    }
+  }, kpis.map(function (k, i) {
+    return /*#__PURE__*/React.createElement(KpiCard, _extends({
+      key: i
+    }, k));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: C.amarelo,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 8
+    }
+  }, "Clientes"), data.resultados.map(function (r, i) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        ...css.card,
+        marginBottom: 8,
+        borderTop: "2px solid " + C.accent
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14
+      }
+    }, r.c.nome), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.texto2,
+        marginTop: 2
+      }
+    }, r.c.prop1, r.c.prop2 ? " e " + r.c.prop2 : "")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        alignItems: "center"
+      }
+    }, [{
+      label: "Imóveis",
+      value: r.nalg + "/" + r.nim,
+      cor: C.texto
+    }, {
+      label: "Receita " + nm,
+      value: fmtBRL(r.recBruta),
+      cor: C.azul
+    }, {
+      label: "Comissão " + nm,
+      value: fmtBRL(r.comissao),
+      cor: C.amarelo
+    }, {
+      label: "Líquido " + nm,
+      value: fmtBRL(r.liq),
+      cor: r.liq >= 0 ? C.verde : C.verm
+    }].map(function (s, j) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: j,
+        style: {
+          textAlign: "right"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          color: C.texto2,
+          fontWeight: 600,
+          textTransform: "uppercase"
+        }
+      }, s.label), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 14,
+          fontWeight: 700,
+          color: s.cor
+        }
+      }, s.value));
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: function () {
+        onAbrirCliente(r.c.id);
+      },
+      style: {
+        ...css.btnPrimary,
+        fontSize: 12,
+        padding: "6px 14px"
+      }
+    }, "Abrir \u2192"))));
+  }));
 }
 
 // =============================================================================
 // NAVEGAÇÃO
 // =============================================================================
+const PAGINAS_GERAL = [{
+  id: "geral",
+  label: "Dashboard Geral",
+  icon: "🏠"
+}];
 const PAGINAS = [{
   id: "dashboard",
   label: "Dashboard",
@@ -1564,6 +3052,14 @@ const PAGINAS = [{
   id: "administradora",
   label: "Administradora",
   icon: "🏛️"
+}, {
+  id: "debitos",
+  label: "Déb. Parciais",
+  icon: "📊"
+}, {
+  id: "prestacao",
+  label: "Prest. Contas",
+  icon: "📑"
 }];
 
 // =============================================================================
@@ -1572,9 +3068,10 @@ const PAGINAS = [{
 function App() {
   const [sessao, setSessao] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pagina, setPagina] = useState("dashboard");
+  const [pagina, setPagina] = useState("geral");
   const [clientes, setClientes] = useState([]);
   const [clienteId, setClienteId] = useState(null);
+  const [modoGeral, setModoGeral] = useState(true);
   useEffect(() => {
     sbClient.auth.getSession().then(({
       data
@@ -1606,7 +3103,16 @@ function App() {
     setSessao(null);
   };
   const clienteAtivo = clientes.find(c => c.id === clienteId);
+  const abrirCliente = id => {
+    setClienteId(id);
+    setModoGeral(false);
+    setPagina("dashboard");
+  };
   const renderPagina = () => {
+    if (modoGeral) return /*#__PURE__*/React.createElement(PageDashboardGeral, {
+      clientes: clientes,
+      onAbrirCliente: abrirCliente
+    });
     if (!clienteId) return /*#__PURE__*/React.createElement("div", {
       style: {
         padding: 40,
@@ -1633,6 +3139,10 @@ function App() {
         return /*#__PURE__*/React.createElement(PageSeguros, props);
       case "administradora":
         return /*#__PURE__*/React.createElement(PageAdministradora, props);
+      case "debitos":
+        return /*#__PURE__*/React.createElement(PageDebitosParciais, props);
+      case "prestacao":
+        return /*#__PURE__*/React.createElement(PagePrestacaoContas, props);
       default:
         return /*#__PURE__*/React.createElement(PageDashboard, props);
     }
@@ -1647,20 +3157,40 @@ function App() {
     style: css.logoSub
   }, "Gest\xE3o Imobili\xE1ria")), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "12px 16px 8px",
+      padding: "8px 16px",
       borderBottom: "1px solid #2a2a2a"
     }
   }, /*#__PURE__*/React.createElement("div", {
+    onClick: () => {
+      setModoGeral(true);
+      setPagina("geral");
+    },
+    style: {
+      background: modoGeral ? "#F5A623" : "#1e1e1e",
+      color: modoGeral ? "#1A1A1A" : "#ccc",
+      borderRadius: 4,
+      padding: "6px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer",
+      textAlign: "center",
+      marginBottom: 8
+    }
+  }, "\uD83C\uDFE0 Vis\xE3o Geral"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       color: "#555",
-      marginBottom: 6,
+      marginBottom: 4,
       textTransform: "uppercase",
       letterSpacing: .5
     }
   }, "Cliente"), /*#__PURE__*/React.createElement("select", {
     value: clienteId || "",
-    onChange: e => setClienteId(e.target.value),
+    onChange: e => {
+      setClienteId(e.target.value);
+      setModoGeral(false);
+      setPagina("dashboard");
+    },
     style: {
       background: "#1e1e1e",
       color: "#ccc",
@@ -1719,7 +3249,7 @@ function App() {
       fontWeight: 600,
       color: C.texto
     }
-  }, PAGINAS.find(p => p.id === pagina)?.label), /*#__PURE__*/React.createElement("div", {
+  }, modoGeral ? "Dashboard Geral" : PAGINAS.find(p => p.id === pagina)?.label), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: C.texto2
