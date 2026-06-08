@@ -677,8 +677,10 @@ function FormImovel({
         condominio: parseFloat(d.condominio) || null,
         irpf_retencao: parseFloat(d.irpf_retencao) || null,
         valor_venda: parseFloat(d.valor_venda) || null,
+        valor_venal: parseFloat(d.valor_venal) || null,
         area: parseFloat(d.area) || null,
         matricula: d.matricula,
+        inscricao_municipal: d.inscricao_municipal || null,
         proprietario: d.proprietario,
         cpf_prop: d.cpf_prop,
         proprietario2: d.proprietario2,
@@ -786,9 +788,19 @@ function FormImovel({
     onChange: v => set("valor_venda", v),
     type: "number"
   }), /*#__PURE__*/React.createElement(Campo, {
+    label: "Valor venal R$",
+    value: d.valor_venal,
+    onChange: v => set("valor_venal", v),
+    type: "number"
+  })), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
     label: "Matr\xEDcula",
     value: d.matricula,
     onChange: v => set("matricula", v)
+  }), /*#__PURE__*/React.createElement(Campo, {
+    label: "Inscri\xE7\xE3o municipal",
+    value: d.inscricao_municipal,
+    onChange: v => set("inscricao_municipal", v),
+    half: true
   })), total > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.amar_bg,
@@ -4888,7 +4900,7 @@ function ModalImovel({
     style: {
       padding: 20
     }
-  }, aba === "dados" && /*#__PURE__*/React.createElement("div", null, [["Tipo", imovel.tipo], ["Status", imovel.status], ["Endereço", imovel.endereco], ["Bairro", imovel.bairro], ["Cidade", imovel.cidade], ["Aluguel", fmtBRL(imovel.valor_aluguel)], ["IPTU parcela", fmtBRL(imovel.iptu_parcela)], ["Desc. luz", fmtBRL(imovel.desconto_luz)], ["Condomínio", fmtBRL(imovel.condominio)], ["Ret. IRPF", fmtBRL(imovel.irpf_retencao)], ["Proprietário", imovel.proprietario], ["CPF/CNPJ 1", imovel.cpf_prop], ["Proprietário 2", imovel.proprietario2], ["CPF/CNPJ 2", imovel.cpf_prop2], ["Matrícula", imovel.matricula], ["UC Sabesp", imovel.uc_sabesp], ["UC Enel", imovel.uc_enel], ["UC Gás", imovel.uc_gas]].filter(r => r[1] && r[1] !== fmtBRL(null) && r[1] !== fmtBRL(0)).map((r, i) => /*#__PURE__*/React.createElement("div", {
+  }, aba === "dados" && /*#__PURE__*/React.createElement("div", null, [["Tipo", imovel.tipo], ["Status", imovel.status], ["Endereço", imovel.endereco], ["Bairro", imovel.bairro], ["Cidade", imovel.cidade], ["Aluguel", fmtBRL(imovel.valor_aluguel)], ["IPTU parcela", fmtBRL(imovel.iptu_parcela)], ["Desc. luz", fmtBRL(imovel.desconto_luz)], ["Condomínio", fmtBRL(imovel.condominio)], ["Ret. IRPF", fmtBRL(imovel.irpf_retencao)], ["Proprietário", imovel.proprietario], ["CPF/CNPJ 1", imovel.cpf_prop], ["Proprietário 2", imovel.proprietario2], ["CPF/CNPJ 2", imovel.cpf_prop2], ["Matrícula", imovel.matricula], ["Inscrição municipal", imovel.inscricao_municipal], ["Valor venal", fmtBRL(imovel.valor_venal)], ["UC Sabesp", imovel.uc_sabesp], ["UC Enel", imovel.uc_enel], ["UC Gás", imovel.uc_gas]].filter(r => r[1] && r[1] !== fmtBRL(null) && r[1] !== fmtBRL(0)).map((r, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       display: "flex",
@@ -7248,9 +7260,247 @@ function gerarPDFDebitos({
 }
 
 // =============================================================================
+// PÁGINA GERENCIAR CLIENTES
+// =============================================================================
+function FormCliente({
+  cliente,
+  onClose,
+  onSaved
+}) {
+  const novo = !cliente;
+  const [d, setD] = useState(cliente ? {
+    ...cliente
+  } : {
+    id: "",
+    nome: "",
+    prop1: "",
+    cpf1: "",
+    prop2: "",
+    cpf2: "",
+    empresa: "",
+    pasta: "",
+    gmail_token_c6: ""
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const set = (k, v) => setD(p => ({
+    ...p,
+    [k]: v
+  }));
+  const salvar = async () => {
+    if (!d.id) {
+      setErro("Informe o ID do cliente (ex: bonito, lmh).");
+      return;
+    }
+    if (!d.nome) {
+      setErro("Informe o nome.");
+      return;
+    }
+    if (!d.pasta) {
+      setErro("Informe a pasta do cliente.");
+      return;
+    }
+    setSalvando(true);
+    setErro("");
+    try {
+      // Salvar no Supabase tabela clientes
+      await sbClient.from("clientes").upsert({
+        id: d.id.toLowerCase().replace(/\s/g, "_"),
+        nome: d.nome,
+        prop1: d.prop1 || "",
+        cpf1: d.cpf1 || "",
+        prop2: d.prop2 || "",
+        cpf2: d.cpf2 || "",
+        empresa: d.empresa || "",
+        pasta: d.pasta || "",
+        gmail_token_c6: d.gmail_token_c6 || ""
+      });
+      onSaved();
+    } catch (e) {
+      setErro(e.message || "Erro ao salvar.");
+    }
+    setSalvando(false);
+  };
+  return /*#__PURE__*/React.createElement(Modal, {
+    titulo: novo ? "Novo Cliente" : "Editar Cliente",
+    onClose: onClose,
+    onSave: salvar,
+    salvando: salvando
+  }, erro && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.verm,
+      fontSize: 12,
+      marginBottom: 10,
+      padding: "8px 12px",
+      background: C.verm_bg,
+      borderRadius: 6
+    }
+  }, erro), /*#__PURE__*/React.createElement(Secao, {
+    texto: "Identifica\xE7\xE3o"
+  }), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "ID (sem espa\xE7os, ex: bonito)",
+    value: d.id,
+    onChange: v => set("id", v),
+    required: true,
+    readOnly: !novo,
+    half: true
+  }), /*#__PURE__*/React.createElement(Campo, {
+    label: "Nome completo do cliente",
+    value: d.nome,
+    onChange: v => set("nome", v),
+    required: true,
+    half: true
+  })), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "Empresa/Administradora",
+    value: d.empresa,
+    onChange: v => set("empresa", v),
+    full: true
+  })), /*#__PURE__*/React.createElement(Secao, {
+    texto: "Propriet\xE1rios"
+  }), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "Propriet\xE1rio 1",
+    value: d.prop1,
+    onChange: v => set("prop1", v),
+    half: true
+  }), /*#__PURE__*/React.createElement(Campo, {
+    label: "CPF 1",
+    value: d.cpf1,
+    onChange: v => set("cpf1", v),
+    half: true
+  })), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "Propriet\xE1rio 2",
+    value: d.prop2,
+    onChange: v => set("prop2", v),
+    half: true
+  }), /*#__PURE__*/React.createElement(Campo, {
+    label: "CPF 2",
+    value: d.cpf2,
+    onChange: v => set("cpf2", v),
+    half: true
+  })), /*#__PURE__*/React.createElement(Secao, {
+    texto: "Pastas no PC (para o Sync Agent)"
+  }), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "Pasta do cliente (ex: D:\\Admin\\!Administradora\\Bonito)",
+    value: d.pasta,
+    onChange: v => set("pasta", v),
+    required: true,
+    full: true
+  })), /*#__PURE__*/React.createElement(FormRow, null, /*#__PURE__*/React.createElement(Campo, {
+    label: "Token Gmail C6 (opcional)",
+    value: d.gmail_token_c6,
+    onChange: v => set("gmail_token_c6", v),
+    full: true
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#f9f7f3",
+      border: "1px solid " + C.borda,
+      borderRadius: 6,
+      padding: 10,
+      marginTop: 8,
+      fontSize: 12,
+      color: C.texto2
+    }
+  }, "\uD83D\uDCA1 Ap\xF3s salvar, o Sync Agent detectar\xE1 automaticamente o novo cliente e come\xE7ar\xE1 a sincronizar. Certifique-se que a pasta existe no PC e tem a subpasta ", /*#__PURE__*/React.createElement("strong", null, "BD"), "."));
+}
+function PageClientes({
+  onClienteAtualizado
+}) {
+  const [clientes, setClientes] = useState([]);
+  const [formCliente, setFormCliente] = useState(null);
+  const load = () => sbClient.from("clientes").select("*").order("nome").then(r => setClientes(r.data || []));
+  useEffect(() => {
+    load();
+  }, []);
+  const excluir = async id => {
+    if (!window.confirm("Excluir cliente " + id + "? Isso não remove os dados do banco.")) return;
+    await sbClient.from("clientes").delete().eq("id", id);
+    load();
+    onClienteAtualizado();
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Clientes"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFormCliente({}),
+    style: css.btnPrimary
+  }, "+ Novo Cliente")), /*#__PURE__*/React.createElement("div", {
+    style: css.card
+  }, /*#__PURE__*/React.createElement("table", {
+    style: css.table
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["ID", "Nome", "Proprietário 1", "Empresa", "Pasta PC", "Ações"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: css.th
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, clientes.map(c => /*#__PURE__*/React.createElement("tr", {
+    key: c.id,
+    onMouseEnter: e => e.currentTarget.style.background = "#f9f7f3",
+    onMouseLeave: e => e.currentTarget.style.background = ""
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      ...css.td,
+      fontWeight: 700,
+      color: C.azul
+    }
+  }, c.id), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, c.nome), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, c.prop1 || "—"), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, c.empresa || "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      ...css.td,
+      fontSize: 11,
+      color: C.texto2,
+      maxWidth: 200,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, c.pasta || "—"), /*#__PURE__*/React.createElement("td", {
+    style: css.td
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFormCliente(c),
+    style: {
+      ...css.btn(C.azul, C.azul_bg),
+      marginRight: 4
+    }
+  }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => excluir(c.id),
+    style: css.btn(C.verm, C.verm_bg)
+  }, "\uD83D\uDDD1")))))), clientes.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      color: C.texto2,
+      textAlign: "center"
+    }
+  }, "Nenhum cliente cadastrado.")), formCliente !== null && /*#__PURE__*/React.createElement(FormCliente, {
+    cliente: formCliente.id ? formCliente : null,
+    onClose: () => setFormCliente(null),
+    onSaved: () => {
+      setFormCliente(null);
+      load();
+      onClienteAtualizado();
+    }
+  }));
+}
+
+// =============================================================================
 // NAVEGAÇÃO
 // =============================================================================
 const PAGINAS = [{
+  id: "geral",
+  label: "Visão Geral",
+  icon: "🏛"
+}, {
   id: "dashboard",
   label: "Dashboard",
   icon: "⬜"
@@ -7290,6 +7540,10 @@ const PAGINAS = [{
   id: "prestacao",
   label: "Prest. Contas",
   icon: "📑"
+}, {
+  id: "clientes",
+  label: "Clientes",
+  icon: "👥"
 }];
 
 // =============================================================================
@@ -7298,7 +7552,7 @@ const PAGINAS = [{
 function App() {
   const [sessao, setSessao] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pagina, setPagina] = useState("dashboard");
+  const [pagina, setPagina] = useState("geral");
   const [clientes, setClientes] = useState([]);
   const [clienteId, setClienteId] = useState(null);
   useEffect(() => {
@@ -7312,7 +7566,7 @@ function App() {
   }, []);
   useEffect(() => {
     if (!sessao) return;
-    sbClient.from("clientes").select("id,nome").order("nome").then(r => {
+    sbClient.from("clientes").select("id,nome,prop1,prop2,empresa,pasta").order("nome").then(r => {
       const cs = r.data || [];
       setClientes(cs);
       if (cs.length > 0 && !clienteId) setClienteId(cs[0].id);
@@ -7333,41 +7587,101 @@ function App() {
   };
   const clienteAtivo = clientes.find(c => c.id === clienteId);
   const renderPagina = () => {
+    // Visão Geral não precisa de clienteId — mostra todos os clientes
+    if (pagina === "geral") {
+      return /*#__PURE__*/React.createElement(PageDashboardGeral, {
+        key: "geral",
+        clientes: clientes,
+        onAbrirCliente: id => {
+          setClienteId(id);
+          setPagina("dashboard");
+        }
+      });
+    }
     if (!clienteId) return /*#__PURE__*/React.createElement("div", {
       style: {
         padding: 40,
         color: C.texto2
       }
     }, "Selecione um cliente.");
-    const props = {
-      clienteId,
-      key: clienteId + "_" + pagina
-    };
+    const k = clienteId + "_" + pagina;
     switch (pagina) {
       case "dashboard":
-        return /*#__PURE__*/React.createElement(PageDashboard, props);
+        return /*#__PURE__*/React.createElement(PageDashboard, {
+          key: k,
+          clienteId: clienteId
+        });
       case "imoveis":
-        return /*#__PURE__*/React.createElement(PageImoveis, props);
+        return /*#__PURE__*/React.createElement(PageImoveis, {
+          key: k,
+          clienteId: clienteId
+        });
       case "contratos":
-        return /*#__PURE__*/React.createElement(PageContratos, props);
+        return /*#__PURE__*/React.createElement(PageContratos, {
+          key: k,
+          clienteId: clienteId
+        });
       case "recebimentos":
-        return /*#__PURE__*/React.createElement(PageRecebimentos, props);
+        return /*#__PURE__*/React.createElement(PageRecebimentos, {
+          key: k,
+          clienteId: clienteId
+        });
       case "pagamentos":
-        return /*#__PURE__*/React.createElement(PagePagamentos, props);
+        return /*#__PURE__*/React.createElement(PagePagamentos, {
+          key: k,
+          clienteId: clienteId
+        });
       case "boletos":
-        return /*#__PURE__*/React.createElement(PageBoletos, props);
+        return /*#__PURE__*/React.createElement(PageBoletos, {
+          key: k,
+          clienteId: clienteId
+        });
       case "seguros":
-        return /*#__PURE__*/React.createElement(PageSeguros, props);
+        return /*#__PURE__*/React.createElement(PageSeguros, {
+          key: k,
+          clienteId: clienteId
+        });
       case "administradora":
-        return /*#__PURE__*/React.createElement(PageAdministradora, props);
+        return /*#__PURE__*/React.createElement(PageAdministradora, {
+          key: k,
+          clienteId: clienteId
+        });
       case "geral":
-        return /*#__PURE__*/React.createElement(PageDashboard, props);
+        return /*#__PURE__*/React.createElement(PageDashboardGeral, {
+          key: "geral",
+          clientes: clientes,
+          onAbrirCliente: id => {
+            setClienteId(id);
+            setPagina("dashboard");
+          }
+        });
       case "debitos":
-        return /*#__PURE__*/React.createElement(PageDebitosParciais, props);
+        return /*#__PURE__*/React.createElement(PageDebitosParciais, {
+          key: k,
+          clienteId: clienteId
+        });
       case "prestacao":
-        return /*#__PURE__*/React.createElement(PagePrestacaoContas, props);
+        return /*#__PURE__*/React.createElement(PagePrestacaoContas, {
+          key: k,
+          clienteId: clienteId
+        });
+      case "clientes":
+        return /*#__PURE__*/React.createElement(PageClientes, {
+          key: "clientes",
+          onClienteAtualizado: () => {
+            sbClient.from("clientes").select("id,nome,prop1,prop2,empresa,pasta").order("nome").then(r => {
+              const cs = r.data || [];
+              setClientes(cs);
+              // Mantém clienteId válido; se o atual saiu da lista, vai pro primeiro
+              if (cs.length > 0 && !cs.find(c => c.id === clienteId)) setClienteId(cs[0].id);
+            });
+          }
+        });
       default:
-        return /*#__PURE__*/React.createElement(PageDashboard, props);
+        return /*#__PURE__*/React.createElement(PageDashboard, {
+          key: k,
+          clienteId: clienteId
+        });
     }
   };
   return /*#__PURE__*/React.createElement("div", {
@@ -7409,7 +7723,7 @@ function App() {
   }, clientes.map(c => /*#__PURE__*/React.createElement("option", {
     key: c.id,
     value: c.id
-  }, c.nome.split(" ")[0])))), /*#__PURE__*/React.createElement("nav", {
+  }, c.id.toUpperCase())))), /*#__PURE__*/React.createElement("nav", {
     style: {
       flex: 1,
       paddingTop: 8
