@@ -5005,26 +5005,12 @@ function ModalImovel({
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setFormVistoria("entrada"),
     style: {
-      background: C.verde_bg,
-      color: C.verde,
-      border: "1px solid " + C.verde,
-      borderRadius: 6,
-      padding: "6px 14px",
-      cursor: "pointer",
-      fontSize: 12,
-      fontWeight: 600
+      ...css.btn(C.verde, C.verde_bg)
     }
   }, "\u25B6 Nova vistoria entrada"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setFormVistoria("saida"),
     style: {
-      background: C.verm_bg,
-      color: C.verm,
-      border: "1px solid " + C.verm,
-      borderRadius: 6,
-      padding: "6px 14px",
-      cursor: "pointer",
-      fontSize: 12,
-      fontWeight: 600
+      ...css.btn(C.verm, C.verm_bg)
     }
   }, "\u25C0 Nova vistoria sa\xEDda"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setFormTermo(true),
