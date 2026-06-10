@@ -4928,7 +4928,9 @@ function ModalImovel({
       width: "100%",
       maxWidth: 680,
       maxHeight: "90vh",
-      overflow: "auto",
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
       boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
     },
     onClick: e => e.stopPropagation()
@@ -4984,7 +4986,9 @@ function ModalImovel({
     }
   }, lbl)))))), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: 20
+      padding: 20,
+      overflowY: "auto",
+      flex: 1
     }
   }, aba === "dados" && /*#__PURE__*/React.createElement("div", null, [["Tipo", imovel.tipo], ["Status", imovel.status], ["Endereço", imovel.endereco], ["Bairro", imovel.bairro], ["Cidade", imovel.cidade], ["Aluguel", fmtBRL(imovel.valor_aluguel)], ["IPTU parcela", fmtBRL(imovel.iptu_parcela)], ["Desc. luz", fmtBRL(imovel.desconto_luz)], ["Condomínio", fmtBRL(imovel.condominio)], ["Ret. IRPF", fmtBRL(imovel.irpf_retencao)], ["Proprietário", imovel.proprietario], ["CPF/CNPJ 1", imovel.cpf_prop], ["Proprietário 2", imovel.proprietario2], ["CPF/CNPJ 2", imovel.cpf_prop2], ["Matrícula", imovel.matricula], ["Inscrição municipal", imovel.inscricao_municipal], ["Valor venal", fmtBRL(imovel.valor_venal)], ["UC Sabesp", imovel.uc_sabesp], ["UC Enel", imovel.uc_enel], ["UC Gás", imovel.uc_gas]].filter(r => r[1] && r[1] !== fmtBRL(null) && r[1] !== fmtBRL(0)).map((r, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
