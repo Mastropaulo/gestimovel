@@ -4782,6 +4782,63 @@ function ModalContrato({
 // =============================================================================
 // MODAL DETALHES DO IMÓVEL (com abas: Dados, Características, Vistorias, Contas)
 // =============================================================================
+// Componente que renderiza imagens HEIC convertendo client-side via heic2any
+function ImgHeic({ src, alt, style }) {
+  const [resolvedSrc, setResolvedSrc] = useState(src);
+  const [failed, setFailed] = useState(false);
+  const isHeic = !!(src && /\.(heic|heif)(\?|$)/i.test(src));
+
+  useEffect(() => {
+    setResolvedSrc(src);
+    setFailed(false);
+  }, [src]);
+
+  const handleError = () => {
+    if (!isHeic || failed) { setFailed(true); return; }
+    // Tenta converter via heic2any se disponivel
+    const lib = window.heic2any;
+    if (!lib) { setFailed(true); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(src, { mode: "cors" });
+        if (cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        const converted = await lib({ blob, toType: "image/jpeg", quality: 0.85 });
+        if (cancelled) return;
+        const out = Array.isArray(converted) ? converted[0] : converted;
+        const url = URL.createObjectURL(out);
+        setResolvedSrc(url);
+      } catch(_e) {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  };
+
+  if (failed) {
+    return React.createElement("div", {
+      style: { ...style, display:"flex", flexDirection:"column", alignItems:"center",
+               justifyContent:"center", background:"#f0ede6", gap:4 }
+    },
+      React.createElement("span", { style: { fontSize: 22 } }, "\uD83D\uDDBC"),
+      React.createElement("a", {
+        href: src, target: "_blank", rel: "noreferrer",
+        style: { fontSize: 9, color: "#888", textDecoration: "none" }
+      }, "HEIC")
+    );
+  }
+
+  return React.createElement("img", {
+    src: resolvedSrc || "",
+    alt: alt || "",
+    style,
+    onError: handleError
+  });
+}
+
+
 function ModalImovel({
   imovel,
   clienteId,
@@ -4792,6 +4849,7 @@ function ModalImovel({
   const [contrato, setContrato] = useState(null);
   const [caracteristicas, setCaracteristicas] = useState(null);
   const [vistorias, setVistorias] = useState([]);
+  const [fotos, setFotos] = useState([]);
   const [contas, setContas] = useState([]);
   const [filtroContas, setFiltroContas] = useState("Água");
   const [formConta, setFormConta] = useState(null);
@@ -4805,6 +4863,12 @@ function ModalImovel({
       ascending: false
     }).then(r => setContas(r.data || []));
   };
+  const loadVistorias = () => {
+    sbClient.from("vistorias").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).order("data", { ascending: false }).then(r => setVistorias(r.data || []));
+  };
+  const loadFotos = () => {
+    sbClient.from("fotos").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).eq("tipo", "divulgacao").order("criado_em", { ascending: true }).then(r => setFotos(r.data || []));
+  };
   useEffect(() => {
     if (!imovel) return;
     Promise.all([sbClient.from("contratos").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).eq("status", "ativo").limit(1), sbClient.from("caracteristicas").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).limit(1), sbClient.from("vistorias").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).order("data", {
@@ -4814,12 +4878,13 @@ function ModalImovel({
       setCaracteristicas((rcar.data || [])[0] || null);
       setVistorias(rvis.data || []);
     });
+    loadFotos();
   }, [imovel, clienteId]);
   useEffect(() => {
     if (imovel) loadContas();
   }, [imovel, clienteId, filtroContas]);
   if (!imovel) return null;
-  const abas = [["dados", "Dados"], ["caract", "Características"], ["vistorias", "Vistorias"], ["contas", "Contas"]];
+  const abas = [["dados", "📋 Dados"], ["caract", "🏠 Características"], ["fotos", "📷 Fotos"], ["vistorias", "🔍 Vistorias"], ["contas", "💳 Contas"]];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -4875,26 +4940,33 @@ function ModalImovel({
   }, "\xD7")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
+      gap: 0,
+      padding: "8px 0 0",
       borderBottom: "1px solid " + C.borda,
       position: "sticky",
       top: 49,
       background: "#fff",
-      zIndex: 1
+      zIndex: 1,
+      width: "100%"
     }
   }, abas.map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setAba(id),
     style: {
-      flex: 1,
-      background: "none",
+      flex: "1 1 0",
+      minWidth: 0,
+      background: aba === id ? C.card : "none",
       border: "none",
       borderBottom: aba === id ? "2px solid " + C.accent : "2px solid transparent",
-      padding: "10px 0",
+      padding: "7px 2px",
       cursor: "pointer",
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: aba === id ? 700 : 400,
       color: aba === id ? C.texto : C.texto2,
-      textAlign: "center"
+      textAlign: "center",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis"
     }
   }, lbl))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4995,7 +5067,63 @@ function ModalImovel({
       textAlign: "center",
       padding: 32
     }
-  }, "Nenhuma caracter\xEDstica cadastrada.")), aba === "vistorias" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "Nenhuma caracter\xEDstica cadastrada.")), aba === "fotos" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFormFotos(true),
+    style: {
+      ...css.btn(C.roxo, "#ede9fb")
+    }
+  }, "\uD83D\uDCF7 Add foto divulga\xE7\xE3o")), fotos.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.texto2,
+      textAlign: "center",
+      padding: 32
+    }
+  }, "Nenhuma foto de divulga\xE7\xE3o cadastrada.") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+      gap: 8,
+      marginTop: 8
+    }
+  }, fotos.map((f, i) => /*#__PURE__*/React.createElement("div", {
+    key: f.id || i,
+    style: {
+      border: "1px solid " + C.borda,
+      borderRadius: 6,
+      overflow: "hidden",
+      background: C.card,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement(ImgHeic, {
+    src: f.url || f.caminho,
+    alt: f.nome || "foto",
+    style: {
+      width: "100%",
+      height: 90,
+      objectFit: "cover"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.texto2,
+      padding: "3px 4px",
+      textAlign: "center",
+      wordBreak: "break-all"
+    }
+  }, (f.nome || f.caminho || "").split("/").pop().split("\\").pop())))), formFotos && /*#__PURE__*/React.createElement(FormFotosDivulgacao, {
+    clienteId: clienteId,
+    imovel: imovel,
+    onClose: () => { setFormFotos(false); loadFotos(); }
+  })), aba === "vistorias" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -5017,12 +5145,7 @@ function ModalImovel({
     style: {
       ...css.btn(C.azul, C.azul_bg)
     }
-  }, "\uD83D\uDCC4 Termo de chaves"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setFormFotos(true),
-    style: {
-      ...css.btn(C.roxo, "#ede9fb")
-    }
-  }, "\uD83D\uDCF8 Fotos divulga\xE7\xE3o")), vistorias.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCC4 Termo de chaves")), vistorias.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       color: C.texto2,
       textAlign: "center",
@@ -5040,19 +5163,13 @@ function ModalImovel({
     onClose: () => setFormVistoria(null),
     onSaved: () => {
       setFormVistoria(null);
-      sbClient.from("vistorias").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).order("data", {
-        ascending: false
-      }).then(r => setVistorias(r.data || []));
+      loadVistorias();
     }
   }), formTermo && /*#__PURE__*/React.createElement(FormTermoChaves, {
     clienteId: clienteId,
     imovel: imovel,
     contrato: contrato,
     onClose: () => setFormTermo(false)
-  }), formFotos && /*#__PURE__*/React.createElement(FormFotosDivulgacao, {
-    clienteId: clienteId,
-    imovel: imovel,
-    onClose: () => setFormFotos(false)
   })), aba === "contas" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -6874,19 +6991,19 @@ function FormFotosDivulgacao({
   const inputRef = React.useRef(null);
   const PORTAIS = [{
     nome: "ZAP Imóveis",
-    url: "https://www.zapimoveis.com.br/",
+    url: "https://www.zapimoveis.com.br/anunciar/",
     cor: "#E84118"
   }, {
     nome: "Viva Real",
-    url: "https://www.vivareal.com.br/",
+    url: "https://www.vivareal.com.br/anunciar/",
     cor: "#0A8043"
   }, {
     nome: "OLX",
-    url: "https://www.olx.com.br/",
+    url: "https://www.olx.com.br/postar-anuncio/",
     cor: "#4520AB"
   }, {
     nome: "Chaves na Mão",
-    url: "https://www.chavesnamao.com.br/",
+    url: "https://www.chavesnamao.com.br/anunciar/",
     cor: "#F39200"
   }];
   const loadFotos = async () => {
@@ -6945,7 +7062,7 @@ function FormFotosDivulgacao({
   }, /*#__PURE__*/React.createElement("input", {
     ref: inputRef,
     type: "file",
-    accept: "image/*",
+    accept: "image/*,.heic,.heif",
     multiple: true,
     style: {
       display: "none"
@@ -6982,7 +7099,7 @@ function FormFotosDivulgacao({
     style: {
       position: "relative"
     }
-  }, /*#__PURE__*/React.createElement("img", {
+  }, /*#__PURE__*/React.createElement(ImgHeic, {
     src: f.url,
     alt: "",
     style: {
