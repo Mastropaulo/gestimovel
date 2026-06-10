@@ -4957,34 +4957,31 @@ function ModalImovel({
       cursor: "pointer",
       color: C.texto2
     }
-  }, "\xD7")), /*#__PURE__*/React.createElement("table", {
+  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
     style: {
       width: "100%",
-      tableLayout: "fixed",
-      borderCollapse: "collapse",
       borderBottom: "1px solid " + C.borda,
-      background: "#fff"
+      background: "#fff",
+      fontSize: 0
     }
-  }, React.createElement("tbody", null, React.createElement("tr", null, abas.map(([id, lbl]) => /*#__PURE__*/React.createElement("td", {
+  }, abas.map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
     key: id,
-    style: { padding: 0, textAlign: "center" }
-  }, React.createElement("button", {
     onClick: () => setAba(id),
     style: {
-      width: "100%",
+      display: "inline-block",
+      width: "20%",
       background: aba === id ? C.card : "none",
       border: "none",
       borderBottom: aba === id ? "2px solid " + C.accent : "2px solid transparent",
-      padding: "8px 2px",
+      padding: "8px 0",
       cursor: "pointer",
       fontSize: 11,
       fontWeight: aba === id ? 700 : 400,
       color: aba === id ? C.texto : C.texto2,
       textAlign: "center",
-      letterSpacing: "-0.2px",
-      display: "block"
+      boxSizing: "border-box"
     }
-  }, lbl)))))), /*#__PURE__*/React.createElement("div", {
+  }, lbl))), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 20,
       overflowY: "auto",
