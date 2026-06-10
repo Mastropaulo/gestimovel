@@ -4868,17 +4868,27 @@ function ModalImovel({
   };
   const loadFotos = async () => {
     const imovelIdNum = String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id);
-    const pasta = `${clienteId}/divulgacao/${clienteId}_${imovelIdNum}`;
-    const { data } = await sbClient.storage.from("vistorias").list(pasta);
-    if (data) {
-      const urls = data.filter(f => f.name && !f.name.startsWith(".")).map(f => {
-        const { data: { publicUrl } } = sbClient.storage.from("vistorias").getPublicUrl(`${pasta}/${f.name}`);
-        return { name: f.name, url: publicUrl };
-      });
-      setFotos(urls);
-    } else {
-      setFotos([]);
+    // Tenta path novo (clienteId_imovelId) e path antigo (imovelId) e junta tudo
+    const pastas = [
+      `${clienteId}/divulgacao/${clienteId}_${imovelIdNum}`,
+      `${clienteId}/divulgacao/${imovelIdNum}`
+    ];
+    const vistos = new Set();
+    const urls = [];
+    for (const pasta of pastas) {
+      try {
+        const { data } = await sbClient.storage.from("vistorias").list(pasta);
+        if (data) {
+          for (const f of data) {
+            if (!f.name || f.name.startsWith(".") || vistos.has(f.name)) continue;
+            vistos.add(f.name);
+            const { data: { publicUrl } } = sbClient.storage.from("vistorias").getPublicUrl(`${pasta}/${f.name}`);
+            urls.push({ name: f.name, url: publicUrl });
+          }
+        }
+      } catch(_e) {}
     }
+    setFotos(urls);
   };
   useEffect(() => {
     if (!imovel) return;
