@@ -4939,34 +4939,33 @@ function ModalImovel({
     }
   }, "\xD7")), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex",
-      gap: 0,
-      padding: "8px 0 0",
+      display: "grid",
+      gridTemplateColumns: "repeat(5, 1fr)",
       borderBottom: "1px solid " + C.borda,
       position: "sticky",
       top: 49,
       background: "#fff",
-      zIndex: 1,
-      width: "100%"
+      zIndex: 1
     }
   }, abas.map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setAba(id),
     style: {
-      flex: "1 1 0",
-      minWidth: 0,
       background: aba === id ? C.card : "none",
       border: "none",
       borderBottom: aba === id ? "2px solid " + C.accent : "2px solid transparent",
-      padding: "7px 2px",
+      borderTop: "none",
+      borderLeft: "none",
+      borderRight: "none",
+      padding: "8px 2px",
       cursor: "pointer",
       fontSize: 11,
       fontWeight: aba === id ? 700 : 400,
       color: aba === id ? C.texto : C.texto2,
       textAlign: "center",
-      whiteSpace: "nowrap",
       overflow: "hidden",
-      textOverflow: "ellipsis"
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
     }
   }, lbl))), /*#__PURE__*/React.createElement("div", {
     style: {
