@@ -4905,7 +4905,7 @@ function ModalImovel({
     if (imovel) loadContas();
   }, [imovel, clienteId, filtroContas]);
   if (!imovel) return null;
-  const abas = [["dados", "📋 Dados"], ["caract", "🏠 Características"], ["fotos", "📷 Fotos"], ["vistorias", "🔍 Vistorias"], ["contas", "💳 Contas"]];
+  const abas = [["dados", "Dados"], ["caract", "Características"], ["fotos", "Fotos"], ["vistorias", "Vistorias"], ["contas", "Contas"]];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -4979,9 +4979,7 @@ function ModalImovel({
       fontWeight: aba === id ? 700 : 400,
       color: aba === id ? C.texto : C.texto2,
       textAlign: "center",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
+      letterSpacing: "-0.2px",
       display: "block"
     }
   }, lbl)))))), /*#__PURE__*/React.createElement("div", {
