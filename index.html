@@ -4866,8 +4866,19 @@ function ModalImovel({
   const loadVistorias = () => {
     sbClient.from("vistorias").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).order("data", { ascending: false }).then(r => setVistorias(r.data || []));
   };
-  const loadFotos = () => {
-    sbClient.from("fotos").select("*").eq("cliente_id", clienteId).eq("imovel_id", imovel.id).eq("tipo", "divulgacao").order("criado_em", { ascending: true }).then(r => setFotos(r.data || []));
+  const loadFotos = async () => {
+    const imovelIdNum = String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id);
+    const pasta = `${clienteId}/divulgacao/${clienteId}_${imovelIdNum}`;
+    const { data } = await sbClient.storage.from("vistorias").list(pasta);
+    if (data) {
+      const urls = data.filter(f => f.name && !f.name.startsWith(".")).map(f => {
+        const { data: { publicUrl } } = sbClient.storage.from("vistorias").getPublicUrl(`${pasta}/${f.name}`);
+        return { name: f.name, url: publicUrl };
+      });
+      setFotos(urls);
+    } else {
+      setFotos([]);
+    }
   };
   useEffect(() => {
     if (!imovel) return;
@@ -4918,10 +4929,7 @@ function ModalImovel({
       alignItems: "center",
       padding: "12px 20px",
       borderBottom: "1px solid " + C.borda,
-      position: "sticky",
-      top: 0,
-      background: "#fff",
-      zIndex: 1
+      background: "#fff"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4942,10 +4950,7 @@ function ModalImovel({
       display: "grid",
       gridTemplateColumns: "repeat(5, 1fr)",
       borderBottom: "1px solid " + C.borda,
-      position: "sticky",
-      top: 49,
-      background: "#fff",
-      zIndex: 1
+      background: "#fff"
     }
   }, abas.map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
     key: id,
@@ -7009,14 +7014,14 @@ function FormFotosDivulgacao({
     setLoading(true);
     const {
       data
-    } = await sbClient.storage.from("vistorias").list(`${clienteId}/divulgacao/${imovel.id}`);
+    } = await sbClient.storage.from("vistorias").list(`${clienteId}/divulgacao/${clienteId}_${String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id)}`);
     if (data) {
       const urls = data.map(f => {
         const {
           data: {
             publicUrl
           }
-        } = sbClient.storage.from("vistorias").getPublicUrl(`${clienteId}/divulgacao/${imovel.id}/${f.name}`);
+        } = sbClient.storage.from("vistorias").getPublicUrl(`${clienteId}/divulgacao/${clienteId}_${String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id)}/${f.name}`);
         return {
           name: f.name,
           url: publicUrl
@@ -7034,7 +7039,7 @@ function FormFotosDivulgacao({
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/")) continue;
       const blob = file;
-      const path = `${clienteId}/divulgacao/${imovel.id}/${Date.now()}_${file.name}`;
+      const imovelNum = String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id); const path = `${clienteId}/divulgacao/${clienteId}_${imovelNum}/${Date.now()}_${file.name}`;
       await sbClient.storage.from("vistorias").upload(path, blob, {
         contentType: file.type
       });
@@ -7044,7 +7049,7 @@ function FormFotosDivulgacao({
   };
   const excluir = async name => {
     if (!window.confirm("Excluir esta foto?")) return;
-    await sbClient.storage.from("vistorias").remove([`${clienteId}/divulgacao/${imovel.id}/${name}`]);
+    await sbClient.storage.from("vistorias").remove([`${clienteId}/divulgacao/${clienteId}_${String(imovel.id).includes("_") ? String(imovel.id).split("_").pop() : String(imovel.id)}/${name}`]);
     loadFotos();
   };
   return /*#__PURE__*/React.createElement(Modal, {
