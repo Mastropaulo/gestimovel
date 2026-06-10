@@ -4927,8 +4927,9 @@ function ModalImovel({
       borderRadius: 10,
       width: "100%",
       maxWidth: 680,
-      maxHeight: "90vh",
-      overflow: "hidden",
+      height: "calc(100vh - 80px)",
+      minHeight: 520,
+      maxHeight: "calc(100vh - 80px)",
       display: "flex",
       flexDirection: "column",
       boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
